@@ -1,13 +1,18 @@
 # Ernestos Payment Reminder
 
-Create a Payment Reminder system using PHP and composer.
+Create a Payment Reminder system as a state machine using PHP and composer.
 
-The Payment Reminder provider runs regularly by cron jobs to check for pending payments and send reminders to customers via email.
-
+The Payment Reminder
+* runs regularly by cron jobs 
+* read status and customer information from an external data source
+* send pending reminders by email to customers
+* log sent email
+* update external data source with new status
 
 ## Architecture
 ````bash
 .env
+crontab
 bin
     payment-reminder.php: uses PaymentReminderService to check for pending payments and send reminders to customers via email.
 Services
