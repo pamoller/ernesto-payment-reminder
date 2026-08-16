@@ -1,8 +1,8 @@
 # Ernestos Payment Reminder
 
-Create a payment reminder system using PHP and composer.
+Create a Payment Reminder system using PHP and composer.
 
-The payment provider runs regular by cron jobs to check for pending payments and send reminders to customers via email.
+The Payment Reminder provider runs regularly by cron jobs to check for pending payments and send reminders to customers via email.
 
 
 ## Architecture
@@ -60,14 +60,55 @@ Active
 
 ## ReminderPolicy
 ````sql
-CREATE TABLE ReminderPolicy (
-    ID INTEGER PRIMARY KEY AUTOINCREMENT,
-    Type TEXT NOT NULL,
-    Started DATETIME NOT NULL,
-    Status TEXT NOT NULL,
-    NextStatus TEXT NOT NULL,
-    Active BOOLEAN NOT NULL DEFAULT 1,
-    EmailBody TEXT NOT NULL,
-    EmailSubject TEXT NOT NULL
+-- Skool Yearly, Skool Half Yearly, Skool Test
+CREATE TABLE product (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(255) NOT NULL
+);
+
+-- Started, Reminder Sent, Followed Up 1, Followed Up 2, Closed
+CREATE TABLE payment_reminder_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    remind_after_days INT NOT NULL, -- ?
+    subject VARCHAR(255) NULL, -- ?
+    body TEXT NULL, -- ?
+);
+
+-- Product Payment Reminder Policy
+CREATE TABLE product_payment_reminder_policy (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INT NOT NULL,
+    payment_reminder_status_id INT NOT NULL,
+    next_payment_reminder_status_id INT NOT NULL,
+    remind_after_days INT NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES product(id),
+    FOREIGN KEY (payment_reminder_status_id) REFERENCES payment_reminder_status(id),
+    FOREIGN KEY (next_payment_reminder_status_id) REFERENCES payment_reminder_status(id)
+);
+
+SELECT
+    `next`.`id`,
+    `next`.`subject`,
+    `next`.`body`
+FROM
+    product_payment_reminder_policy `is`
+    JOIN product_payment_reminder_policy `next` ON `is`.next_payment_reminder_status_id = `next`.payment_reminder_status_id
+WHERE
+    `is`.`product_id` = :product_id AND
+    `is`.`payment_reminder_status_id` = :payment_reminder_status_id AND
+    CURRENT_DATE >= DATE_ADD(:started, INTERVAL `remind_after_days` DAY);
+
+-- check consistency for user and product
+CREATE TABLE payment_reminder_log (
+    `email` VARCHAR(255) NOT NULL,
+    `product_id` INT NOT NULL,
+    `payment_reminder_status_id` INT NOT NULL,
+    `sent` DATETIME NOT NULL,
+    `email_message` VARCHAR(255) NOT NULL,
+    FOREIGN KEY (`product_id`) REFERENCES product(id),
+    FOREIGN KEY (`payment_reminder_status_id`) REFERENCES payment_reminder_status(id)
 );
 ````
