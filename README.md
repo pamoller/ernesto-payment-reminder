@@ -30,20 +30,22 @@ Services
         Model
             CustomerOrder
             CustomerOrderGateway
+                * list(): CustomerOrder[] # active = true and status <> 'Closed'
+                * updateStatus(CustomerOrder, NextStatus, ActualDate): void # set status = NextStatus where ID = ?, processed = ActualDate
             PaymentReminder
             PaymentReminderGateway
-            SmtpGateway
+                * search(CustomerOrder): return PaymentReminder
+                * log(CustomerOrder, PaymentReminder): void
+            Message
+            MessageGateway
+                * send(Message): void
     Infrastructure
         Smtp
             DefaultSmtpGateway
         Persistence
             GoogleSheetCustomerOrderGateway
-                * list(): active = true and status <> 'Closed'
-                * updateStatus: set status = NextStatus where ID = ?, processed = ActualDate
             MySQLPaymentReminderGateway
-                * search(CustomerOrder): return PaymentReminder
-                * log(CustomerOrder, PaymentReminder): void
-
+            SmtpMessageGateway
     test
 ````
 
