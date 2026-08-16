@@ -6,6 +6,7 @@ The payment provider runs regular by cron jobs to check for pending payments and
 
 
 ## Architecture
+````bash
 .env
 bin
     payment-reminder.php: uses PaymentReminderService to check for pending payments and send reminders to customers via email.
@@ -30,9 +31,11 @@ Services
             SqlitePaymentPolicyGateway
                 * search(Type, Started, Status): return ID, NextStatus
     test
-
+````
 
 ## DataSheet
+
+````
 ID
 CustomerID
 Name
@@ -53,15 +56,18 @@ Processed
     'Datetime'
 Active
     'Boolean'
+`````
 
 ## ReminderPolicy
-type
-daterange
-status
-next_status
-active
-    'Boolean'
-email_body
-    'String'
-email_subject
-    'String'
+````sql
+CREATE TABLE ReminderPolicy (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Type TEXT NOT NULL,
+    Started DATETIME NOT NULL,
+    Status TEXT NOT NULL,
+    NextStatus TEXT NOT NULL,
+    Active BOOLEAN NOT NULL DEFAULT 1,
+    EmailBody TEXT NOT NULL,
+    EmailSubject TEXT NOT NULL
+);
+````
