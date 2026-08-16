@@ -1,8 +1,12 @@
 # Ernestos Payment Reminder
 
-Create a Payment Reminder system as a state machine using PHP and composer.
+Create a Payment Reminder system as a state machine using: 
 
-The Payment Reminder
+* PHP
+* composer
+* Doctrine (MySQL)
+
+The Payment Reminder itself is a state machine that:
 * runs regularly by cron jobs 
 * read status and customer information from an external data source
 * send pending reminders by email to customers
@@ -71,11 +75,14 @@ Active
 
 ## ReminderPolicy
 ````sql
+DELIMITER $$
+
 -- Skool Yearly, Skool Half Yearly, Skool Test
 CREATE TABLE product (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(255) NOT NULL
-);
+)
+$$
 
 -- Started, Reminder Sent, Followed Up 1, Followed Up 2, Closed
 CREATE TABLE payment_reminder_status (
@@ -84,7 +91,8 @@ CREATE TABLE payment_reminder_status (
     remind_after_days INT NOT NULL, -- ?
     subject VARCHAR(255) NOT NULL, -- ?
     body TEXT NOT NULL, -- ?
-);
+)
+$$
 
 -- Product Payment Reminder Policy
 CREATE TABLE product_payment_reminder_policy (
@@ -100,22 +108,8 @@ CREATE TABLE product_payment_reminder_policy (
     FOREIGN KEY (product_id) REFERENCES product(id),
     FOREIGN KEY (payment_reminder_status_id) REFERENCES payment_reminder_status(id),
     FOREIGN KEY (next_payment_reminder_status_id) REFERENCES payment_reminder_status(id)
-);
-
-SELECT
-    `next_prs`.`name` AS new_status, -- write back to sheet
-    `prs`.`id` AS last_status_id,
-    COALESCE(`next_pprp`.`subject`, `prs`.`subject`) AS subject,
-    COALESCE(`next_pprp`.`body`, `prs`.`body`) AS body
-FROM
-    product_payment_reminder_policy `pprp`
-    JOIN product_reminder_status `prs` ON `pprp`.`payment_reminder_status_id` = `prs`.id
-    JOIN product_payment_reminder_policy `next_pprp` ON `pprp`.next_payment_reminder_status_id = `next_pprp`.payment_reminder_status_id
-    JOIN product_reminder_status `next_prs` ON `next_pprp`.`payment_reminder_status_id` = `next_prs`.id
-WHERE
-    `pprp`.`product_id` = :product_id AND
-    `prs`.`name` = :status AND
-    CURRENT_DATE >= DATE_ADD(:started, INTERVAL `pprp`.`remind_after_days` DAY);
+)
+$$
 
 -- check consistency for user and product and datasheet
 CREATE TABLE payment_reminder_log (
@@ -126,5 +120,30 @@ CREATE TABLE payment_reminder_log (
     `email_message` VARCHAR(255) NOT NULL,
     FOREIGN KEY (`product_id`) REFERENCES product(id),
     FOREIGN KEY (`payment_reminder_status_id`) REFERENCES payment_reminder_status(id)
-);
+)
+$$
+
+-- resolve next status for product and current status and started date
+CREATE PROCEDURE get_next_payment_reminder_status(
+    IN product_id INT, 
+    IN status VARCHAR(255), 
+    IN started DATETIME
+)
+BEGIN
+SELECT
+    `next_prs`.`name` AS new_status, -- write back to sheet
+    `prs`.`id` AS last_status_id,
+    COALESCE(`next_pprp`.`subject`, `prs`.`subject`) AS subject,
+    COALESCE(`next_pprp`.`body`, `prs`.`body`) AS body
+FROM
+    product_payment_reminder_policy `pprp`
+    JOIN payment_reminder_status `prs` ON `pprp`.`payment_reminder_status_id` = `prs`.id
+    JOIN product_payment_reminder_policy `next_pprp` ON `pprp`.next_payment_reminder_status_id = `next_pprp`.payment_reminder_status_id
+    JOIN payment_reminder_status `next_prs` ON `next_pprp`.`payment_reminder_status_id` = `next_prs`.id
+WHERE
+    `pprp`.`product_id` = :product_id AND
+    `prs`.`name` = :status AND
+    CURRENT_DATE >= DATE_ADD(:started, INTERVAL `pprp`.`remind_after_days` DAY);
+END
+$$
 ````
