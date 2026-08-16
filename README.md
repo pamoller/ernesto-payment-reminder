@@ -15,6 +15,8 @@ The Payment Reminder itself is a state machine that:
 * update external data source with new status
 
 ## Architecture
+Use Port and Adapter architecture to separate the domain logic from the infrastructure and external data source.
+
 ````bash
 .env
 crontab
@@ -26,20 +28,22 @@ Services
         PaymentReminderCommand
     Domain
         Model
+            CustomerOrder
+            CustomerOrderGateway
             PaymentReminder
             PaymentReminderGateway
-            PaymentReminderPolicy
-            PaymentReminderPolicyGateway
             SmtpGateway
     Infrastructure
         Smtp
             DefaultSmtpGateway
         Persistence
-            GoogleSheetPaymentReminderGateway
-                * list: active = true and status <> 'Closed'
+            GoogleSheetCustomerOrderGateway
+                * list(): active = true and status <> 'Closed'
                 * updateStatus: set status = NextStatus where ID = ?, processed = ActualDate
-            SqlitePaymentPolicyGateway
-                * search(Type, Started, Status): return ID, NextStatus
+            MySQLPaymentReminderGateway
+                * search(CustomerOrder): return PaymentReminder
+                * log(CustomerOrder, PaymentReminder): void
+
     test
 ````
 
