@@ -5,6 +5,7 @@ Create a Payment Reminder system as a state machine using:
 * PHP
 * composer
 * Doctrine (MySQL)
+* GoogleSheet as external data source
 
 The Payment Reminder itself is a state machine that:
 * runs regularly by cron jobs 
@@ -42,7 +43,7 @@ Services
     test
 ````
 
-## DataSheet
+## External Data Source Model
 
 ````
 ID
@@ -73,7 +74,7 @@ Active
     'Nein'
 ````
 
-## ReminderPolicy
+## Data Model
 ````sql
 DELIMITER $$
 
