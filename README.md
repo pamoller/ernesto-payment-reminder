@@ -37,26 +37,32 @@ Services
 
 ````
 ID
-CustomerID
 Name
+    'String
 Firstname
+    'String'
+Email
+    'Email'
 Started
     'Datetime'
-Type
+Produkt
     'Skool Yearly'
     'Skool Half Yearly'
     'Skool Test'
-Status
+Reminder Status
     'Started'
     'Reminder Sent'
     'Followed Up 1'
     'Followed Up 2'
     'Closed'
-Processed
+Last Status Change By Service
     'Datetime'
+Last Status Set By Service
+    'String'
 Active
-    'Boolean'
-`````
+    'Ja'
+    'Nein'
+````
 
 ## ReminderPolicy
 ````sql
@@ -71,8 +77,8 @@ CREATE TABLE payment_reminder_status (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(255) NOT NULL UNIQUE,
     remind_after_days INT NOT NULL, -- ?
-    subject VARCHAR(255) NULL, -- ?
-    body TEXT NULL, -- ?
+    subject VARCHAR(255) NOT NULL, -- ?
+    body TEXT NOT NULL, -- ?
 );
 
 -- Product Payment Reminder Policy
@@ -81,32 +87,37 @@ CREATE TABLE product_payment_reminder_policy (
     product_id INT NOT NULL,
     payment_reminder_status_id INT NOT NULL,
     next_payment_reminder_status_id INT NOT NULL,
-    remind_after_days INT NOT NULL,
-    subject VARCHAR(255) NOT NULL,
-    body TEXT NOT NULL,
+    remind_after_days NULL,
+    subject VARCHAR(255) NULL,
+    body TEXT NULL,
+    UNIQUE KEY (product_id, payment_reminder_status_id),
+    UNIQUE KEY (product_id, next_payment_reminder_status_id),
     FOREIGN KEY (product_id) REFERENCES product(id),
     FOREIGN KEY (payment_reminder_status_id) REFERENCES payment_reminder_status(id),
     FOREIGN KEY (next_payment_reminder_status_id) REFERENCES payment_reminder_status(id)
 );
 
 SELECT
-    `next`.`id`,
-    `next`.`subject`,
-    `next`.`body`
+    `next_prs`.`name` AS new_status, -- write back to sheet
+    `prs`.`id` AS last_status_id,
+    COALESCE(`next_pprp`.`subject`, `prs`.`subject`) AS subject,
+    COALESCE(`next_pprp`.`body`, `prs`.`body`) AS body
 FROM
-    product_payment_reminder_policy `is`
-    JOIN product_payment_reminder_policy `next` ON `is`.next_payment_reminder_status_id = `next`.payment_reminder_status_id
+    product_payment_reminder_policy `pprp`
+    JOIN product_reminder_status `prs` ON `pprp`.`payment_reminder_status_id` = `prs`.id
+    JOIN product_payment_reminder_policy `next_pprp` ON `pprp`.next_payment_reminder_status_id = `next_pprp`.payment_reminder_status_id
+    JOIN product_reminder_status `next_prs` ON `next_pprp`.`payment_reminder_status_id` = `next_prs`.id
 WHERE
-    `is`.`product_id` = :product_id AND
-    `is`.`payment_reminder_status_id` = :payment_reminder_status_id AND
-    CURRENT_DATE >= DATE_ADD(:started, INTERVAL `remind_after_days` DAY);
+    `pprp`.`product_id` = :product_id AND
+    `prs`.`name` = :status AND
+    CURRENT_DATE >= DATE_ADD(:started, INTERVAL `pprp`.`remind_after_days` DAY);
 
--- check consistency for user and product
+-- check consistency for user and product and datasheet
 CREATE TABLE payment_reminder_log (
     `email` VARCHAR(255) NOT NULL,
     `product_id` INT NOT NULL,
     `payment_reminder_status_id` INT NOT NULL,
-    `sent` DATETIME NOT NULL,
+    `sent` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `email_message` VARCHAR(255) NOT NULL,
     FOREIGN KEY (`product_id`) REFERENCES product(id),
     FOREIGN KEY (`payment_reminder_status_id`) REFERENCES payment_reminder_status(id)
