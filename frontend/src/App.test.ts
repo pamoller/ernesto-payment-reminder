@@ -8,8 +8,19 @@ describe('App', () => {
   })
 
   it('lädt und zeigt bestehende Kunden', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url === '/api/auth/session') {
+        return new Response(JSON.stringify({
+          authenticated: true,
+          csrf_token: 'test-csrf',
+          username: 'admin',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({
         customers: [{
           id: 1,
           name: 'Ada Lovelace',
@@ -22,8 +33,8 @@ describe('App', () => {
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-      }),
-    )
+      })
+    })
 
     const wrapper = mount(App)
     await flushPromises()

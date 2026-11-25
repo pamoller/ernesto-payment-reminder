@@ -1,7 +1,7 @@
 # Implementierungsplan
 
 ## Aktueller Entwicklungsschritt
-Grundlegende Projektstruktur, Kunden-CRUD und Erinnerungsversand-Slice.
+Grundlegende Projektstruktur, Kunden-CRUD, Erinnerungsversand und Authentisierung-Slice.
 
 ## Freigegebene Architekturentscheidungen
 
@@ -20,6 +20,8 @@ Grundlegende Projektstruktur, Kunden-CRUD und Erinnerungsversand-Slice.
 - MariaDB-kompatible PDO-Persistenz und lokaler SQLite-Fallback.
 - Erinnerungsmarkierung erfolgt atomisch über `subscriptions.reminder_sent`.
 - SMTP-Ausnahme setzt die eigene atomare Markierung bedingt zurück.
+- Kunden- und Mutationsrouten sind durch PHP-Sessions und CSRF-Tokens geschützt.
+- Der Administratorzugang wird über `AUTH_USERNAME` und einen Argon2id-Hash in `AUTH_PASSWORD_HASH` konfiguriert.
 
 ## Offene fachliche Fragen
 
@@ -35,6 +37,7 @@ Grundlegende Projektstruktur, Kunden-CRUD und Erinnerungsversand-Slice.
 - Frontend-Produktionsbuild erfolgreich.
 - Laufzeitvertrag `api-test.sh`: Health sowie Kunden-CRUD erfolgreich.
 - SQLite-Migration und `bin/run-reminders.php`: erfolgreicher Leerlauf ohne Kunden.
+- PHP-Session-Login und geschützte Kundenrouten: Laufzeitvertrag erfolgreich.
 
 ## Vorgeschlagene nächsten Schritte
 

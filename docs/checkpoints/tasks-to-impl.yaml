@@ -4,101 +4,66 @@ metadata:
   last_updated: "2026-11-25"
 
 summary:
-  total_tasks: 3
-  completed_tasks: 3
+  total_tasks: 4
+  completed_tasks: 4
   in_progress_tasks: 0
   pending_tasks: 0
   completion_percentage: 100.0
 
 tasks:
-  - task_id: "T001"
-    description: "Create project foundation and health endpoint"
-    status: "completed"
-    verification:
-      build_passed: true
-      test_results:
-        command: "php vendor/bin/phpunit"
-        passed: 14
-        failed: 0
-        skipped: 0
-        failures: []
-      notes: "Foundation, CRUD and reminder tests pass"
-    upstream_trace:
-      plan_item: "Phase 1"
-      requirements: ["REQ-HEALTH"]
-      full_trace: "REQ-HEALTH -> Phase 1 -> T001"
-
-  - task_id: "T002"
-    description: "Implement customer CRUD with subscription data"
-    status: "completed"
-    verification:
-      build_passed: true
-      test_results:
-        command: "bash ./api-test.sh"
-        passed: 6
-        failed: 0
-        skipped: 0
-        failures: []
-      notes: "Customer CRUD runtime contract passed"
-    upstream_trace:
-      plan_item: "Kunden-CRUD"
-      requirements: ["REQ-CUSTOMERS"]
-      full_trace: "REQ-CUSTOMERS -> Kunden-CRUD -> T002"
-
-  - task_id: "T003"
-    description: "Implement automatic subscription reminder sending"
+  - task_id: "T004"
+    description: "Protect customer API and UI with session authentication"
     status: "completed"
     implementation:
       files_changed:
-        - file: "backend/src/Application/Reminder/"
+        - file: "backend/src/Infrastructure/Http/AuthController.php"
           changes:
             - change_type: "created"
-              description: "Added reminder orchestration, ports and result reporting"
-        - file: "backend/src/Infrastructure/Reminder/"
+              description: "Added session login, logout and CSRF token endpoints"
+        - file: "backend/src/Infrastructure/Auth/"
           changes:
             - change_type: "created"
-              description: "Added PHPMailer adapter and duration-specific templates"
-        - file: "backend/bin/run-reminders.php"
-          changes:
-            - change_type: "created"
-              description: "Added repeatable cron entry point"
-        - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
+              description: "Added session authorization and CSRF middleware"
+        - file: "backend/public/index.php"
           changes:
             - change_type: "modified"
-              description: "Added atomic claim and conditional reset operations"
+              description: "Configured secure sessions and protected customer routes"
+        - file: "frontend/src/App.vue"
+          changes:
+            - change_type: "modified"
+              description: "Added login/logout UI and CSRF request headers"
     verification:
       build_passed: true
       test_results:
-        command: "php vendor/bin/phpunit"
-        passed: 14
+        command: "php vendor/bin/phpunit; npm test; npm run build"
+        passed: 17
         failed: 0
         skipped: 0
         failures: []
-      notes: "Due, already-sent, claim, SMTP, reset and template cases pass"
+      notes: "Argon2id login, session protection and CSRF contract pass"
     upstream_trace:
-      plan_item: "Erinnerungsversand"
-      requirements: ["REQ-REMINDER"]
-      full_trace: "REQ-REMINDER -> Erinnerungsversand -> T003"
+      plan_item: "Authentifizierung"
+      requirements: ["REQ-AUTH"]
+      full_trace: "REQ-AUTH -> Authentifizierung -> T004"
 
 pending_tasks: []
 untracked_changes: []
 traceability_chain:
-  - chain_id: "TRACE-003"
-    requirement: "REQ-REMINDER"
-    plan_phase: "Slice 3"
-    plan_item: "Erinnerungsversand"
-    tasks: ["T003"]
+  - chain_id: "TRACE-004"
+    requirement: "REQ-AUTH"
+    plan_phase: "Slice 4"
+    plan_item: "Authentifizierung"
+    tasks: ["T004"]
     files:
-      - "backend/src/Application/Reminder/"
-      - "backend/src/Infrastructure/Reminder/"
-      - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
-      - "backend/bin/run-reminders.php"
+      - "backend/src/Infrastructure/Http/AuthController.php"
+      - "backend/src/Infrastructure/Auth/"
+      - "backend/public/index.php"
+      - "frontend/src/App.vue"
     status: "complete"
 
 validation:
   passed: true
   errors: []
   warnings:
-    - "No real SMTP server was used; SMTP delivery is verified with test doubles."
-    - "Authentication remains outside this reminder slice."
+    - "Production HTTPS cookie behavior and reverse-proxy forwarding require deployment verification."
   blocking_issues: []

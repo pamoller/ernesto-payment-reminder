@@ -13,6 +13,11 @@ type Customer = {
 
 const customers = ref<Customer[]>([])
 const error = ref('')
+const username = ref('')
+const authenticated = ref(false)
+const csrfToken = ref('')
+const loginUsername = ref('')
+const loginPassword = ref('')
 const editingId = ref<number | null>(null)
 const form = reactive({
   name: '',
@@ -26,6 +31,64 @@ async function loadCustomers(): Promise<void> {
   if (!response.ok) throw new Error('Kunden konnten nicht geladen werden')
   const body = await response.json() as { customers: Customer[] }
   customers.value = body.customers
+}
+
+async function loadSession(): Promise<void> {
+  const response = await fetch('/api/auth/session', { credentials: 'same-origin' })
+  if (!response.ok) throw new Error('Session konnte nicht geladen werden')
+  const body = await response.json() as {
+    authenticated: boolean
+    csrf_token: string
+    username: string | null
+  }
+  authenticated.value = body.authenticated
+  csrfToken.value = body.csrf_token
+  username.value = body.username ?? ''
+  if (body.authenticated) await loadCustomers()
+}
+
+async function login(): Promise<void> {
+  error.value = ''
+  try {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken.value,
+      },
+      body: JSON.stringify({
+        username: loginUsername.value,
+        password: loginPassword.value,
+      }),
+    })
+    const body = await response.json() as { authenticated?: boolean; csrf_token?: string; error?: string }
+    if (!response.ok) throw new Error(body.error ?? 'Login fehlgeschlagen')
+    authenticated.value = body.authenticated === true
+    csrfToken.value = body.csrf_token ?? csrfToken.value
+    loginPassword.value = ''
+    await loadCustomers()
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
+  }
+}
+
+async function logout(): Promise<void> {
+  error.value = ''
+  try {
+    const response = await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-Token': csrfToken.value },
+    })
+    if (!response.ok) throw new Error('Logout fehlgeschlagen')
+    authenticated.value = false
+    username.value = ''
+    customers.value = []
+    await loadSession()
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
+  }
 }
 
 function resetForm(): void {
@@ -44,7 +107,10 @@ async function saveCustomer(): Promise<void> {
       editingId.value === null ? '/api/customers' : `/api/customers/${editingId.value}`,
       {
         method: editingId.value === null ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken.value,
+        },
         body: JSON.stringify(form),
       },
     )
@@ -69,7 +135,10 @@ function editCustomer(customer: Customer): void {
 async function deleteCustomer(customer: Customer): Promise<void> {
   error.value = ''
   try {
-    const response = await fetch(`/api/customers/${customer.id}`, { method: 'DELETE' })
+    const response = await fetch(`/api/customers/${customer.id}`, {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': csrfToken.value },
+    })
     if (!response.ok) throw new Error('Kunde konnte nicht gelöscht werden')
     await loadCustomers()
   } catch (caught) {
@@ -79,7 +148,7 @@ async function deleteCustomer(customer: Customer): Promise<void> {
 
 onMounted(async () => {
   try {
-    await loadCustomers()
+    await loadSession()
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
   }
@@ -90,7 +159,21 @@ onMounted(async () => {
   <main>
     <h1>Ernesto Payment Reminder</h1>
 
-    <form @submit.prevent="saveCustomer">
+    <form v-if="!authenticated" @submit.prevent="login">
+      <label>Benutzername
+        <input v-model="loginUsername" name="username" autocomplete="username" required />
+      </label>
+      <label>Passwort
+        <input v-model="loginPassword" name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit">Anmelden</button>
+    </form>
+
+    <template v-else>
+      <p>Angemeldet als {{ username }}</p>
+      <button type="button" @click="logout">Abmelden</button>
+
+      <form @submit.prevent="saveCustomer">
       <label>Name
         <input v-model="form.name" name="name" required />
       </label>
@@ -111,9 +194,9 @@ onMounted(async () => {
       <button v-if="editingId !== null" type="button" @click="resetForm">Abbrechen</button>
     </form>
 
-    <p v-if="error" role="alert">{{ error }}</p>
+      <p v-if="error" role="alert">{{ error }}</p>
 
-    <table>
+      <table>
       <thead>
         <tr>
           <th>Name</th>
@@ -137,6 +220,7 @@ onMounted(async () => {
           </td>
         </tr>
       </tbody>
-    </table>
+      </table>
+    </template>
   </main>
 </template>

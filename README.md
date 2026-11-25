@@ -34,6 +34,18 @@ php bin/run-reminders.php
 
 Der Cronjob darf den Vorgang wiederholt ausführen. Bereits versendete Erinnerungen werden über `subscriptions.reminder_sent` nicht erneut ausgelöst.
 
+## Authentifizierung
+
+Der Administratorzugang wird ausschließlich über Umgebungsvariablen konfiguriert:
+
+```bash
+export AUTH_USERNAME='admin'
+AUTH_PASSWORD_HASH="$(php -r 'echo password_hash("Ihr-sicheres-Passwort", PASSWORD_ARGON2ID);')"
+export AUTH_PASSWORD_HASH
+```
+
+Das Hash wird in `AUTH_PASSWORD_HASH` gesetzt. Das Klartextpasswort wird weder im Repository noch in der Anwendung gespeichert.
+
 ## Tests
 
 ```bash

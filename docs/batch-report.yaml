@@ -1,73 +1,101 @@
-batch_id: "B03"
-completed_tasks: ["T003"]
+batch_id: "B04"
+completed_tasks: ["T004"]
 blocked_tasks: []
 files_changed:
-  T003:
-    - file: "backend/src/Application/Reminder/"
+  T004:
+    - file: "backend/src/Infrastructure/Http/AuthController.php"
       change_type: "created"
-      description: "Added reminder use-case orchestration and ports"
-    - file: "backend/src/Infrastructure/Reminder/"
+      description: "Added login, logout and session endpoints"
+    - file: "backend/src/Infrastructure/Auth/"
       change_type: "created"
-      description: "Added SMTP adapter and duration templates"
-    - file: "backend/bin/run-reminders.php"
-      change_type: "created"
-      description: "Added cron entry point"
-    - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
+      description: "Added session authorization and CSRF middleware"
+    - file: "backend/public/index.php"
       change_type: "modified"
-      description: "Added conditional claim and reset SQL"
-    - file: "backend/migrations/003_add_reminder_index.sql"
-      change_type: "created"
-      description: "Added reminder status index"
-    - file: "README.md"
+      description: "Configured secure sessions and protected customer routes"
+    - file: "frontend/src/App.vue"
       change_type: "modified"
-      description: "Documented cron and SMTP configuration"
+      description: "Added login/logout and CSRF-aware CRUD requests"
+    - file: "contracts/openapi.yaml"
+      change_type: "modified"
+      description: "Documented authentication endpoints"
+    - file: "api-test.sh"
+      change_type: "modified"
+      description: "Added unauthenticated, login and protected CRUD contract checks"
 upstream_artifacts_consumed:
-  T003:
-    - artifact: "docs/ai-plan.md#5"
-      used_for: "Atomic reminder state and SMTP rollback semantics"
-    - artifact: "pamoller/ernesto-payment-reminder#2"
-      used_for: "Duration templates, BCC and one-time reminder behavior"
+  T004:
+    - artifact: "docs/ai-plan.md#6"
+      used_for: "Argon2id, PHP sessions and CSRF security requirements"
+    - artifact: "docs/ai-plan.md#9"
+      used_for: "Incremental approved authentication slice"
 evidence_mapping:
-  T003:
-    - upstream: "docs/ai-plan.md#5"
-      output: "backend/src/Application/Reminder/ReminderService.php"
-      evidence: "backend/tests/Application/Reminder/ReminderServiceTest.php"
-    - upstream: "pamoller/ernesto-payment-reminder#2"
-      output: "backend/src/Infrastructure/Reminder/ReminderTemplate.php"
-      evidence: "backend/tests/Infrastructure/Reminder/ReminderTemplateTest.php"
+  T004:
+    - upstream: "docs/ai-plan.md#Sicherheit"
+      output: "backend/src/Infrastructure/Http/AuthController.php"
+      evidence: "backend/tests/Infrastructure/Http/AuthControllerTest.php"
+    - upstream: "contracts/openapi.yaml"
+      output: "backend/public/index.php"
+      evidence: "api-test.sh"
 traceability:
-  - requirement: "REQ-REMINDER"
-    plan_item: "Erinnerungsversand"
-    task: "T003"
+  - requirement: "REQ-AUTH"
+    plan_item: "Authentifizierung"
+    task: "T004"
     files:
-      - "backend/src/Application/Reminder/"
-      - "backend/src/Infrastructure/Reminder/"
-      - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
-      - "backend/bin/run-reminders.php"
+      - "backend/src/Infrastructure/Http/AuthController.php"
+      - "backend/src/Infrastructure/Auth/"
+      - "backend/public/index.php"
+      - "frontend/src/App.vue"
     status: "completed"
 protocol_violation: false
 errors: []
 warnings:
   - severity: MEDIUM
-    message: "No real SMTP server was used; delivery is covered by test doubles only."
+    message: "The login rate limit is session-local; production distributed rate limiting was not added."
   - severity: MEDIUM
-    message: "Real SMTP delivery and concurrent Cron execution still require production configuration and operational verification."
-required_endpoints: []
-endpoint_probes: []
+    message: "Production HTTPS and reverse-proxy cookie settings require deployment verification."
+required_endpoints:
+  - method: GET
+    path: /api/auth/session
+    source: api-test.sh
+    status: implemented
+  - method: POST
+    path: /api/auth/login
+    source: api-test.sh
+    status: implemented
+  - method: POST
+    path: /api/auth/logout
+    source: api-test.sh
+    status: implemented
+endpoint_probes:
+  - method: GET
+    path: /api/auth/session
+    status: 200
+    result: PASS
+  - method: POST
+    path: /api/auth/login
+    status: 200
+    result: PASS
+  - method: GET
+    path: /api/customers
+    status: 401
+    result: PASS
+  - method: POST
+    path: /api/customers
+    status: 201
+    result: PASS
 test_results:
-  T003_BACKEND:
+  T004_BACKEND:
     command: "cd backend && php vendor/bin/phpunit"
-    passed: 14
+    passed: 17
     failed: 0
     skipped: 0
     failures: []
-  T003_FRONTEND:
+  T004_FRONTEND:
     command: "cd frontend && npm test"
     passed: 1
     failed: 0
     skipped: 0
     failures: []
-  T003_BUILD:
+  T004_BUILD:
     command: "cd frontend && npm run build"
     passed: 1
     failed: 0

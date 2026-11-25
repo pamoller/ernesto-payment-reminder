@@ -7,22 +7,45 @@ use App\Application\Customer\CustomerService;
 use App\Infrastructure\Database\PdoCustomerRepository;
 use App\Infrastructure\Database\PdoFactory;
 use App\Infrastructure\Http\CustomerController;
+use App\Infrastructure\Http\AuthController;
+use App\Infrastructure\Auth\SessionAuth;
+use App\Infrastructure\Auth\Csrf;
 use Slim\Factory\AppFactory;
 
 require __DIR__ . '/../vendor/autoload.php';
 
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+$secureCookie = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+ini_set('session.cookie_secure', $secureCookie ? '1' : '0');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '',
+    'secure' => $secureCookie,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+session_start();
+
 $app = AppFactory::create();
 $app->addBodyParsingMiddleware();
+$app->add(new Csrf());
 
 $app->get('/api/health', HealthController::class);
+$authController = new AuthController();
+$app->get('/api/auth/session', [$authController, 'session']);
+$app->post('/api/auth/login', [$authController, 'login']);
+$app->post('/api/auth/logout', [$authController, 'logout']);
+
 $pdo = PdoFactory::create();
 $customerController = new CustomerController(
     new CustomerService(new PdoCustomerRepository($pdo)),
 );
 
-$app->get('/api/customers', [$customerController, 'list']);
-$app->post('/api/customers', [$customerController, 'create']);
-$app->get('/api/customers/{id}', [$customerController, 'get']);
-$app->put('/api/customers/{id}', [$customerController, 'update']);
-$app->delete('/api/customers/{id}', [$customerController, 'delete']);
+$app->get('/api/customers', [$customerController, 'list'])->add(new SessionAuth());
+$app->post('/api/customers', [$customerController, 'create'])->add(new SessionAuth());
+$app->get('/api/customers/{id}', [$customerController, 'get'])->add(new SessionAuth());
+$app->put('/api/customers/{id}', [$customerController, 'update'])->add(new SessionAuth());
+$app->delete('/api/customers/{id}', [$customerController, 'delete'])->add(new SessionAuth());
 $app->run();

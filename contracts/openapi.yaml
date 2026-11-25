@@ -3,6 +3,42 @@ info:
   title: Ernesto Payment Reminder API
   version: 0.1.0
 paths:
+  /api/auth/session:
+    get:
+      summary: Get login session and CSRF token
+      responses:
+        '200':
+          description: Session status
+  /api/auth/login:
+    post:
+      summary: Login administrator
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+        '419':
+          description: Invalid CSRF token
+        '429':
+          description: Too many login attempts
+  /api/auth/logout:
+    post:
+      summary: Logout administrator
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Logout successful
   /api/health:
     get:
       summary: System health
