@@ -70,16 +70,15 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, email, duration_months, start_date]
+              required: [name, email, subscription_type_id, start_date]
               properties:
                 name:
                   type: string
                 email:
                   type: string
                   format: email
-                duration_months:
+                subscription_type_id:
                   type: integer
-                  enum: [3, 6, 12]
                 start_date:
                   type: string
                   format: date
@@ -88,6 +87,12 @@ paths:
           description: Customer created
         '422':
           description: Validation error
+  /api/subscription-types:
+    get:
+      summary: List available subscription types
+      responses:
+        '200':
+          description: Subscription types
   /api/customers/{id}:
     parameters:
       - name: id

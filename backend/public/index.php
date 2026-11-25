@@ -6,6 +6,7 @@ use App\Infrastructure\Http\HealthController;
 use App\Application\Customer\CustomerService;
 use App\Infrastructure\Database\PdoCustomerRepository;
 use App\Infrastructure\Database\PdoFactory;
+use App\Infrastructure\Database\PdoSubscriptionTypeRepository;
 use App\Infrastructure\Http\CustomerController;
 use App\Infrastructure\Http\AuthController;
 use App\Infrastructure\Http\ReminderController;
@@ -44,8 +45,12 @@ $app->post('/api/auth/logout', [$authController, 'logout']);
 
 $pdo = PdoFactory::create();
 $customerRepository = new PdoCustomerRepository($pdo);
+$customerService = new CustomerService(
+    $customerRepository,
+    new PdoSubscriptionTypeRepository($pdo),
+);
 $customerController = new CustomerController(
-    new CustomerService($customerRepository),
+    $customerService,
 );
 $reminderController = new ReminderController(
     new ReminderService(
@@ -65,6 +70,7 @@ $reminderController = new ReminderController(
 );
 
 $app->get('/api/customers', [$customerController, 'list'])->add(new SessionAuth());
+$app->get('/api/subscription-types', [$customerController, 'listSubscriptionTypes'])->add(new SessionAuth());
 $app->post('/api/customers', [$customerController, 'create'])->add(new SessionAuth());
 $app->get('/api/customers/{id}', [$customerController, 'get'])->add(new SessionAuth());
 $app->put('/api/customers/{id}', [$customerController, 'update'])->add(new SessionAuth());

@@ -53,11 +53,19 @@ require_status login 200 "$login_status"
 csrf_token="$(php -r '$body=json_decode(file_get_contents("/tmp/ernesto-login.json"), true, 512, JSON_THROW_ON_ERROR); echo $body["csrf_token"] ?? "";')"
 test -n "$csrf_token"
 
+subscription_types_status="$(curl -sS -o /tmp/ernesto-subscription-types.json -w '%{http_code}' \
+  -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt "$base_url/api/subscription-types")"
+require_status subscription-types 200 "$subscription_types_status"
+subscription_type_3_id="$(php -r '$body=json_decode(file_get_contents("/tmp/ernesto-subscription-types.json"), true, 512, JSON_THROW_ON_ERROR); foreach ($body["subscription_types"] as $type) { if ($type["duration_months"] === 3) { echo $type["id"]; exit; } } exit(1);')"
+subscription_type_12_id="$(php -r '$body=json_decode(file_get_contents("/tmp/ernesto-subscription-types.json"), true, 512, JSON_THROW_ON_ERROR); foreach ($body["subscription_types"] as $type) { if ($type["duration_months"] === 12) { echo $type["id"]; exit; } } exit(1);')"
+test -n "$subscription_type_3_id"
+test -n "$subscription_type_12_id"
+
 create_status="$(curl -sS -o /tmp/ernesto-customer.json -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: $csrf_token" \
-  -d '{"name":"API Test Customer","email":"api-test@example.invalid","duration_months":3,"start_date":"2026-01-01"}' \
+  -d "{\"name\":\"API Test Customer\",\"email\":\"api-test@example.invalid\",\"subscription_type_id\":$subscription_type_3_id,\"start_date\":\"2026-01-01\"}" \
   "$base_url/api/customers")"
 require_status customer-create 201 "$create_status"
 
@@ -77,7 +85,7 @@ update_status="$(curl -sS -o /tmp/ernesto-customer-updated.json -w '%{http_code}
   -X PUT \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: $csrf_token" \
-  -d '{"name":"API Test Updated","email":"api-test@example.invalid","duration_months":12,"start_date":"2026-02-01"}' \
+  -d "{\"name\":\"API Test Updated\",\"email\":\"api-test@example.invalid\",\"subscription_type_id\":$subscription_type_12_id,\"start_date\":\"2026-02-01\"}" \
   "$base_url/api/customers/$customer_id")"
 require_status customer-update 200 "$update_status"
 

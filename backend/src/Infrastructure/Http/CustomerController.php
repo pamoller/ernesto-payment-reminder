@@ -21,6 +21,13 @@ final class CustomerController
         return $this->json($response, ['customers' => $this->service->all()]);
     }
 
+    public function listSubscriptionTypes(
+        ServerRequestInterface $request,
+        ResponseInterface $response,
+    ): ResponseInterface {
+        return $this->json($response, ['subscription_types' => $this->service->subscriptionTypes()]);
+    }
+
     public function get(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         $customer = $this->service->find((int) $args['id']);

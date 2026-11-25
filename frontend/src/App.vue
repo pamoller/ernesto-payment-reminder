@@ -5,13 +5,23 @@ type Customer = {
   id: number
   name: string
   email: string
+  subscription_type_id: number
   duration_months: number
   start_date: string
   expires_at: string
   reminder_sent: string | null
 }
 
+type SubscriptionType = {
+  id: number
+  name: string
+  duration: string
+  duration_months: number
+  reminder: string
+}
+
 const customers = ref<Customer[]>([])
+const subscriptionTypes = ref<SubscriptionType[]>([])
 const error = ref('')
 const success = ref('')
 const username = ref('')
@@ -24,9 +34,19 @@ const editingId = ref<number | null>(null)
 const form = reactive({
   name: '',
   email: '',
-  duration_months: 3,
+  subscription_type_id: 0,
   start_date: new Date().toISOString().slice(0, 10),
 })
+
+async function loadSubscriptionTypes(): Promise<void> {
+  const response = await fetch('/api/subscription-types')
+  if (!response.ok) throw new Error('Abo-Typen konnten nicht geladen werden')
+  const body = await response.json() as { subscription_types: SubscriptionType[] }
+  subscriptionTypes.value = body.subscription_types
+  if (form.subscription_type_id === 0 && subscriptionTypes.value.length > 0) {
+    form.subscription_type_id = subscriptionTypes.value[0].id
+  }
+}
 
 async function loadCustomers(): Promise<void> {
   const response = await fetch('/api/customers')
@@ -46,7 +66,10 @@ async function loadSession(): Promise<void> {
   authenticated.value = body.authenticated
   csrfToken.value = body.csrf_token
   username.value = body.username ?? ''
-  if (body.authenticated) await loadCustomers()
+  if (body.authenticated) {
+    await loadSubscriptionTypes()
+    await loadCustomers()
+  }
 }
 
 async function login(): Promise<void> {
@@ -69,6 +92,7 @@ async function login(): Promise<void> {
     authenticated.value = body.authenticated === true
     csrfToken.value = body.csrf_token ?? csrfToken.value
     loginPassword.value = ''
+    await loadSubscriptionTypes()
     await loadCustomers()
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
@@ -97,7 +121,7 @@ function resetForm(): void {
   editingId.value = null
   form.name = ''
   form.email = ''
-  form.duration_months = 3
+  form.subscription_type_id = subscriptionTypes.value[0]?.id ?? 0
   form.start_date = new Date().toISOString().slice(0, 10)
   error.value = ''
 }
@@ -129,9 +153,13 @@ function editCustomer(customer: Customer): void {
   editingId.value = customer.id
   form.name = customer.name
   form.email = customer.email
-  form.duration_months = customer.duration_months
+  form.subscription_type_id = customer.subscription_type_id
   form.start_date = customer.start_date
   error.value = ''
+}
+
+function subscriptionTypeName(id: number): string {
+  return subscriptionTypes.value.find((type) => type.id === id)?.name ?? 'Unbekannter Abo-Typ'
 }
 
 async function deleteCustomer(customer: Customer): Promise<void> {
@@ -210,11 +238,11 @@ onMounted(async () => {
       <label>E-Mail
         <input v-model="form.email" name="email" type="email" required />
       </label>
-      <label>Laufzeit
-        <select v-model.number="form.duration_months" name="duration_months">
-          <option :value="3">3 Monate</option>
-          <option :value="6">6 Monate</option>
-          <option :value="12">12 Monate</option>
+      <label>Abo-Typ
+        <select v-model.number="form.subscription_type_id" name="subscription_type_id" required>
+          <option v-for="type in subscriptionTypes" :key="type.id" :value="type.id">
+            {{ type.name }} ({{ type.duration_months }} Monate)
+          </option>
         </select>
       </label>
       <label>Startdatum
@@ -240,7 +268,7 @@ onMounted(async () => {
         <tr v-for="customer in customers" :key="customer.id">
           <td>{{ customer.name }}</td>
           <td>{{ customer.email }}</td>
-          <td>{{ customer.duration_months }} Monate</td>
+          <td>{{ subscriptionTypeName(customer.subscription_type_id) }} ({{ customer.duration_months }} Monate)</td>
           <td>{{ customer.start_date }}</td>
           <td>{{ customer.expires_at }}</td>
           <td>{{ customer.reminder_sent ?? 'Noch nicht gesendet' }}</td>

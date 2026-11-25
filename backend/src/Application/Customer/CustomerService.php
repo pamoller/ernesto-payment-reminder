@@ -7,13 +7,32 @@ namespace App\Application\Customer;
 use App\Domain\Customer\Customer;
 use App\Domain\Customer\CustomerRepository;
 use App\Domain\Customer\Subscription;
+use App\Domain\Customer\SubscriptionType;
+use App\Domain\Customer\SubscriptionTypeRepository;
 use DateTimeImmutable;
 use InvalidArgumentException;
 
 final class CustomerService
 {
-    public function __construct(private readonly CustomerRepository $customers)
+    public function __construct(
+        private readonly CustomerRepository $customers,
+        private readonly SubscriptionTypeRepository $subscriptionTypes,
+    ) {
+    }
+
+    /** @return list<array{id:int,name:string,duration:string,duration_months:int,reminder:string}> */
+    public function subscriptionTypes(): array
     {
+        return array_map(
+            fn (SubscriptionType $type): array => [
+                'id' => $type->id,
+                'name' => $type->name,
+                'duration' => $type->duration,
+                'duration_months' => $type->durationMonths(),
+                'reminder' => $type->reminder,
+            ],
+            $this->subscriptionTypes->all(),
+        );
     }
 
     /** @return list<array<string, mixed>> */
@@ -34,8 +53,10 @@ final class CustomerService
      */
     public function create(array $input): array
     {
+        $type = $this->subscriptionType($input);
         $subscription = Subscription::create(
-            $this->integer($input, 'duration_months'),
+            $type->id,
+            $type->durationMonths(),
             $this->startDate($input),
         );
         $customer = Customer::create(
@@ -59,9 +80,11 @@ final class CustomerService
         $customer->rename($this->string($input, 'name'));
         $customer->changeEmail($this->string($input, 'email'));
         $existing = $customer->subscription();
+        $type = $this->subscriptionType($input);
         $customer->changeSubscription(Subscription::reconstitute(
             (int) $existing->id(),
-            $this->integer($input, 'duration_months'),
+            $type->id,
+            $type->durationMonths(),
             $this->startDate($input),
             $existing->reminderSent(),
         ));
@@ -87,9 +110,19 @@ final class CustomerService
     private function integer(array $input, string $key): int
     {
         if (!isset($input[$key]) || filter_var($input[$key], FILTER_VALIDATE_INT) === false) {
-            throw new InvalidArgumentException('Duration months is required');
+            throw new InvalidArgumentException(ucfirst(str_replace('_', ' ', $key)) . ' is required');
         }
         return (int) $input[$key];
+    }
+
+    /** @param array<string, mixed> $input */
+    private function subscriptionType(array $input): SubscriptionType
+    {
+        $type = $this->subscriptionTypes->findById($this->integer($input, 'subscription_type_id'));
+        if ($type === null) {
+            throw new InvalidArgumentException('Subscription type was not found');
+        }
+        return $type;
     }
 
     /** @param array<string, mixed> $input */
@@ -114,6 +147,7 @@ final class CustomerService
             'id' => $customer->id(),
             'name' => $customer->name(),
             'email' => $customer->email(),
+            'subscription_type_id' => $subscription->subscriptionTypeId(),
             'duration_months' => $subscription->durationMonths(),
             'start_date' => $subscription->startsAt()->format('Y-m-d'),
             'expires_at' => $subscription->expiresAt()->format('Y-m-d'),

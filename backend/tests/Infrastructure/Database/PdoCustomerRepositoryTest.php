@@ -33,15 +33,30 @@ final class PdoCustomerRepositoryTest extends TestCase
             )'
         );
         $this->pdo->exec(
+            'CREATE TABLE subscription_type (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                duration TEXT NOT NULL UNIQUE,
+                reminder TEXT NOT NULL
+            )'
+        );
+        $this->pdo->exec(
+            "INSERT INTO subscription_type (id, name, duration, reminder) VALUES
+                (1, 'Skool Test', '3 MONTHS', 'Reminder Text 123'),
+                (2, 'Skool Halbjahres Abo', '6 MONTHS', 'Reminder Text 123'),
+                (3, 'Skool Jahres Abo', '12 MONTHS', 'Reminder Text 123')"
+        );
+        $this->pdo->exec(
             'CREATE TABLE subscriptions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 customer_id INTEGER NOT NULL UNIQUE,
-                duration_months INTEGER NOT NULL,
+                subscription_type_id INTEGER NOT NULL,
                 starts_at TEXT NOT NULL,
                 reminder_sent TEXT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE
+                FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+                FOREIGN KEY(subscription_type_id) REFERENCES subscription_type(id)
             )'
         );
         $this->repository = new PdoCustomerRepository($this->pdo);
@@ -52,7 +67,7 @@ final class PdoCustomerRepositoryTest extends TestCase
         $customer = Customer::create(
             'Ada Lovelace',
             'ada@example.com',
-            Subscription::create(12, new DateTimeImmutable('2026-01-01T00:00:00Z')),
+            Subscription::create(3, 12, new DateTimeImmutable('2026-01-01T00:00:00Z')),
         );
 
         $saved = $this->repository->save($customer);
@@ -61,16 +76,18 @@ final class PdoCustomerRepositoryTest extends TestCase
         $found = $this->repository->findById((int) $saved->id());
         self::assertNotNull($found);
         self::assertSame('Ada Lovelace', $found->name());
+        self::assertSame(3, $found->subscription()->subscriptionTypeId());
         self::assertSame(12, $found->subscription()->durationMonths());
 
         $found->rename('Augusta Ada');
         $found->changeSubscription(
-            Subscription::create(3, new DateTimeImmutable('2026-02-01T00:00:00Z')),
+            Subscription::create(1, 3, new DateTimeImmutable('2026-02-01T00:00:00Z')),
         );
         $this->repository->save($found);
 
         $updated = $this->repository->findById((int) $saved->id());
         self::assertSame('Augusta Ada', $updated->name());
+        self::assertSame(1, $updated->subscription()->subscriptionTypeId());
         self::assertSame(3, $updated->subscription()->durationMonths());
 
         self::assertTrue($this->repository->delete((int) $saved->id()));
@@ -82,7 +99,7 @@ final class PdoCustomerRepositoryTest extends TestCase
         $customer = Customer::create(
             'Ada Lovelace',
             'ada@example.com',
-            Subscription::create(3, new DateTimeImmutable('2026-01-01T00:00:00Z')),
+            Subscription::create(1, 3, new DateTimeImmutable('2026-01-01T00:00:00Z')),
         );
         $saved = $this->repository->save($customer);
         $subscription = $saved->subscription();
@@ -107,7 +124,7 @@ final class PdoCustomerRepositoryTest extends TestCase
         $customer = Customer::create(
             'Ada Lovelace',
             'ada@example.com',
-            Subscription::create(12, new DateTimeImmutable('2026-01-01T00:00:00Z')),
+            Subscription::create(3, 12, new DateTimeImmutable('2026-01-01T00:00:00Z')),
         );
         $saved = $this->repository->save($customer);
         $subscriptionId = (int) $saved->subscription()->id();

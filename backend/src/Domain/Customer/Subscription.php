@@ -12,29 +12,43 @@ final class Subscription
     private ?DateTimeImmutable $reminderSent = null;
 
     private function __construct(
+        private readonly int $subscriptionTypeId,
         private readonly int $durationMonths,
         private readonly DateTimeImmutable $startsAt,
         ?DateTimeImmutable $reminderSent,
         private ?int $id = null,
     ) {
+        if ($subscriptionTypeId < 1) {
+            throw new InvalidArgumentException('Subscription type is required');
+        }
         if (!in_array($durationMonths, [3, 6, 12], true)) {
             throw new InvalidArgumentException('Duration must be 3, 6 or 12 months');
         }
         $this->reminderSent = $reminderSent;
     }
 
-    public static function create(int $durationMonths, DateTimeImmutable $startsAt): self
+    public static function create(
+        int $subscriptionTypeId,
+        int $durationMonths,
+        DateTimeImmutable $startsAt,
+    ): self
     {
-        return new self($durationMonths, $startsAt, null);
+        return new self($subscriptionTypeId, $durationMonths, $startsAt, null);
     }
 
     public static function reconstitute(
         int $id,
+        int $subscriptionTypeId,
         int $durationMonths,
         DateTimeImmutable $startsAt,
         ?DateTimeImmutable $reminderSent,
     ): self {
-        return new self($durationMonths, $startsAt, $reminderSent, $id);
+        return new self($subscriptionTypeId, $durationMonths, $startsAt, $reminderSent, $id);
+    }
+
+    public function subscriptionTypeId(): int
+    {
+        return $this->subscriptionTypeId;
     }
 
     public function id(): ?int

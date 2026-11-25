@@ -20,11 +20,21 @@ describe('App', () => {
           headers: { 'Content-Type': 'application/json' },
         })
       }
+      if (url === '/api/subscription-types') {
+        return new Response(JSON.stringify({
+          subscription_types: [
+            { id: 1, name: 'Skool Test', duration: '3 MONTHS', duration_months: 3, reminder: 'Reminder Text 123' },
+            { id: 2, name: 'Skool Halbjahres Abo', duration: '6 MONTHS', duration_months: 6, reminder: 'Reminder Text 123' },
+            { id: 3, name: 'Skool Jahres Abo', duration: '12 MONTHS', duration_months: 12, reminder: 'Reminder Text 123' },
+          ],
+        }), { status: 200 })
+      }
       return new Response(JSON.stringify({
         customers: [{
           id: 1,
           name: 'Ada Lovelace',
           email: 'ada@example.com',
+          subscription_type_id: 2,
           duration_months: 6,
           start_date: '2026-01-01',
           expires_at: '2026-07-01',
@@ -84,6 +94,13 @@ describe('App', () => {
           username: 'admin',
         }), { status: 200 })
       }
+      if (url === '/api/subscription-types') {
+        return new Response(JSON.stringify({
+          subscription_types: [
+            { id: 3, name: 'Skool Jahres Abo', duration: '12 MONTHS', duration_months: 12, reminder: 'Reminder Text 123' },
+          ],
+        }), { status: 200 })
+      }
       if (url === '/api/customers/1/remind') {
         expect(init?.method).toBe('POST')
         expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('test-csrf')
@@ -97,6 +114,7 @@ describe('App', () => {
           id: 1,
           name: 'Ada Lovelace',
           email: 'ada@example.com',
+          subscription_type_id: 3,
           duration_months: 12,
           start_date: '2026-03-01',
           expires_at: '2027-03-01',

@@ -175,6 +175,12 @@ final class ReminderServiceTest extends TestCase
     ): Customer {
         $subscription = Subscription::reconstitute(
             42,
+            match ($duration) {
+                3 => 1,
+                6 => 2,
+                12 => 3,
+                default => throw new \InvalidArgumentException('Unsupported duration'),
+            },
             $duration,
             new DateTimeImmutable($start),
             $sentAt,
