@@ -4,8 +4,8 @@ metadata:
   last_updated: "2026-11-25"
 
 summary:
-  total_tasks: 1
-  completed_tasks: 1
+  total_tasks: 2
+  completed_tasks: 2
   in_progress_tasks: 0
   pending_tasks: 0
   completion_percentage: 100.0
@@ -14,55 +14,75 @@ tasks:
   - task_id: "T001"
     description: "Create project foundation and GET /api/health vertical slice"
     status: "completed"
-    implementation:
-      files_changed:
-        - file: "backend/public/index.php"
-          changes:
-            - change_type: "created"
-              description: "Configured Slim front controller and health route"
-        - file: "backend/src/Infrastructure/Http/HealthController.php"
-          changes:
-            - change_type: "created"
-              description: "Implemented JSON health response"
-        - file: "frontend/src/App.vue"
-          changes:
-            - change_type: "created"
-              description: "Added frontend health status display"
-        - file: "contracts/openapi.yaml"
-          changes:
-            - change_type: "created"
-              description: "Documented GET /api/health contract"
     verification:
       build_passed: true
       test_results:
-        command: "php vendor/bin/phpunit; cd frontend && npm test && npm run build"
-        passed: 2
+        command: "php vendor/bin/phpunit"
+        passed: 5
         failed: 0
         skipped: 0
         failures: []
-      notes: "Runtime API contract passed against php built-in server"
+      notes: "Health and customer domain/repository tests pass"
     upstream_trace:
-      plan_item: "Grundlegende Projektstruktur"
+      plan_item: "Phase 1"
       requirements: ["REQ-HEALTH"]
-      full_trace: "REQ-HEALTH → Grundlegende Projektstruktur → T001 → GET /api/health"
+      full_trace: "REQ-HEALTH -> Phase 1 -> T001"
+
+  - task_id: "T002"
+    description: "Implement customer CRUD with subscription data"
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "backend/src/Domain/Customer/"
+          changes:
+            - change_type: "created"
+              description: "Added rich Customer and Subscription domain model"
+        - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
+          changes:
+            - change_type: "created"
+              description: "Added prepared PDO persistence"
+        - file: "backend/src/Infrastructure/Http/CustomerController.php"
+          changes:
+            - change_type: "created"
+              description: "Added customer REST handlers"
+        - file: "frontend/src/App.vue"
+          changes:
+            - change_type: "modified"
+              description: "Added customer CRUD interface"
+    verification:
+      build_passed: true
+      test_results:
+        command: "bash ./api-test.sh"
+        passed: 6
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "Health and customer CRUD endpoints passed at runtime"
+    upstream_trace:
+      plan_item: "Kunden-CRUD"
+      requirements: ["REQ-CUSTOMERS"]
+      full_trace: "REQ-CUSTOMERS -> Kunden-CRUD -> T002"
 
 pending_tasks: []
 untracked_changes: []
 traceability_chain:
-  - chain_id: "TRACE-001"
-    requirement: "REQ-HEALTH"
-    plan_phase: "Phase 1"
-    plan_item: "Grundlegende Projektstruktur"
-    tasks: ["T001"]
+  - chain_id: "TRACE-002"
+    requirement: "REQ-CUSTOMERS"
+    plan_phase: "Slice 2"
+    plan_item: "Kunden-CRUD"
+    tasks: ["T002"]
     files:
-      - "backend/public/index.php"
-      - "backend/src/Infrastructure/Http/HealthController.php"
+      - "backend/src/Domain/Customer/"
+      - "backend/src/Application/Customer/CustomerService.php"
+      - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
+      - "backend/src/Infrastructure/Http/CustomerController.php"
       - "frontend/src/App.vue"
-      - "contracts/openapi.yaml"
     status: "complete"
 
 validation:
   passed: true
   errors: []
-  warnings: []
+  warnings:
+    - "The local MariaDB socket was unavailable; runtime verification used the SQLite fallback."
+    - "Customer routes are not yet password-protected; authentication remains in the next approved slice."
   blocking_issues: []

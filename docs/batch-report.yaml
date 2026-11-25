@@ -1,55 +1,87 @@
-batch_id: "B01"
-completed_tasks: ["T001"]
+batch_id: "B02"
+completed_tasks: ["T002"]
 blocked_tasks: []
 files_changed:
-  T001:
-    - file: "backend/"
+  T002:
+    - file: "backend/src/Domain/Customer/"
       change_type: "created"
-      description: "Created Slim backend structure and health controller"
-    - file: "frontend/"
+      description: "Added Customer, Subscription and repository interface"
+    - file: "backend/src/Application/Customer/CustomerService.php"
       change_type: "created"
-      description: "Created Vue 3/Vite frontend and health status test"
+      description: "Added CRUD orchestration and validation"
+    - file: "backend/src/Infrastructure/Database/"
+      change_type: "created"
+      description: "Added PDO factory and customer repository"
+    - file: "backend/src/Infrastructure/Http/CustomerController.php"
+      change_type: "created"
+      description: "Added REST customer handlers"
+    - file: "backend/migrations/"
+      change_type: "created"
+      description: "Added MariaDB customer and subscription tables"
+    - file: "frontend/src/App.vue"
+      change_type: "modified"
+      description: "Added customer CRUD interface"
     - file: "contracts/openapi.yaml"
-      change_type: "created"
-      description: "Added health endpoint contract"
+      change_type: "modified"
+      description: "Documented customer endpoints"
     - file: "api-test.sh"
-      change_type: "created"
-      description: "Added runtime API contract check"
-    - file: "docs/implementation-plan.md"
-      change_type: "created"
-      description: "Documented current slice and next steps"
+      change_type: "modified"
+      description: "Added runtime customer CRUD contract"
 upstream_artifacts_consumed:
-  T001:
+  T002:
     - artifact: "docs/ai-plan.md"
-      used_for: "Architecture, technology stack and health integration requirements"
-    - artifact: "contracts/openapi.yaml"
-      used_for: "GET /api/health response contract"
+      used_for: "Customer requirements and Clean Architecture constraints"
+    - artifact: "pamoller/ernesto-payment-reminder#1"
+      used_for: "Name, email, duration and start date CRUD fields"
 evidence_mapping:
-  T001:
-    - upstream: "docs/ai-plan.md#6"
-      output: "backend/public/index.php"
-      evidence: "backend/tests/Infrastructure/Http/HealthControllerTest.php"
-    - upstream: "docs/ai-plan.md#Lokale Entwicklungsumgebung"
-      output: "frontend/vite.config.ts"
-      evidence: "npm test and npm run build"
+  T002:
+    - upstream: "pamoller/ernesto-payment-reminder#1"
+      output: "backend/src/Domain/Customer/"
+      evidence: "backend/tests/Domain/Customer/CustomerTest.php"
+    - upstream: "contracts/openapi.yaml"
+      output: "backend/src/Infrastructure/Http/CustomerController.php"
+      evidence: "api-test.sh"
 traceability:
-  - requirement: "REQ-HEALTH"
-    plan_item: "Grundlegende Projektstruktur"
-    task: "T001"
+  - requirement: "REQ-CUSTOMERS"
+    plan_item: "Kunden-CRUD"
+    task: "T002"
     files:
-      - "backend/public/index.php"
-      - "backend/src/Infrastructure/Http/HealthController.php"
+      - "backend/src/Domain/Customer/"
+      - "backend/src/Application/Customer/CustomerService.php"
+      - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
+      - "backend/src/Infrastructure/Http/CustomerController.php"
       - "frontend/src/App.vue"
-      - "contracts/openapi.yaml"
     status: "completed"
 protocol_violation: false
 errors: []
 warnings:
   - severity: MEDIUM
-    message: "npm audit reports 11 dependency vulnerabilities; versions require review before production use"
+    message: "The local MariaDB socket was unavailable; runtime verification used the documented SQLite fallback."
+  - severity: MEDIUM
+    message: "Customer routes are not yet password-protected; authentication remains in the next approved slice."
 required_endpoints:
   - method: GET
     path: /api/health
+    source: api-test.sh
+    status: implemented
+  - method: POST
+    path: /api/customers
+    source: api-test.sh
+    status: implemented
+  - method: GET
+    path: /api/customers
+    source: api-test.sh
+    status: implemented
+  - method: GET
+    path: /api/customers/{id}
+    source: api-test.sh
+    status: implemented
+  - method: PUT
+    path: /api/customers/{id}
+    source: api-test.sh
+    status: implemented
+  - method: DELETE
+    path: /api/customers/{id}
     source: api-test.sh
     status: implemented
 endpoint_probes:
@@ -57,20 +89,40 @@ endpoint_probes:
     path: /api/health
     status: 200
     result: PASS
+  - method: POST
+    path: /api/customers
+    status: 201
+    result: PASS
+  - method: GET
+    path: /api/customers
+    status: 200
+    result: PASS
+  - method: GET
+    path: /api/customers/{id}
+    status: 200
+    result: PASS
+  - method: PUT
+    path: /api/customers/{id}
+    status: 200
+    result: PASS
+  - method: DELETE
+    path: /api/customers/{id}
+    status: 204
+    result: PASS
 test_results:
-  T001:
+  T002_BACKEND:
     command: "cd backend && php vendor/bin/phpunit"
-    passed: 1
+    passed: 5
     failed: 0
     skipped: 0
     failures: []
-  T001_FRONTEND:
+  T002_FRONTEND:
     command: "cd frontend && npm test"
     passed: 1
     failed: 0
     skipped: 0
     failures: []
-  T001_BUILD:
+  T002_BUILD:
     command: "cd frontend && npm run build"
     passed: 1
     failed: 0

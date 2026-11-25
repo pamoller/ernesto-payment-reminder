@@ -7,3 +7,28 @@ status="$(curl -sSf -o /tmp/ernesto-health.json -w '%{http_code}' "$base_url/api
 
 test "$status" = "200"
 php -r '$body=json_decode(file_get_contents("/tmp/ernesto-health.json"), true, 512, JSON_THROW_ON_ERROR); exit(($body["status"] ?? null) === "ok" ? 0 : 1);'
+
+create_status="$(curl -sS -o /tmp/ernesto-customer.json -w '%{http_code}' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"API Test Customer","email":"api-test@example.invalid","duration_months":3,"start_date":"2026-01-01"}' \
+  "$base_url/api/customers")"
+test "$create_status" = "201"
+
+customer_id="$(php -r '$body=json_decode(file_get_contents("/tmp/ernesto-customer.json"), true, 512, JSON_THROW_ON_ERROR); echo $body["customer"]["id"];')"
+test -n "$customer_id"
+
+list_status="$(curl -sS -o /tmp/ernesto-customers.json -w '%{http_code}' "$base_url/api/customers")"
+test "$list_status" = "200"
+
+get_status="$(curl -sS -o /tmp/ernesto-customer-get.json -w '%{http_code}' "$base_url/api/customers/$customer_id")"
+test "$get_status" = "200"
+
+update_status="$(curl -sS -o /tmp/ernesto-customer-updated.json -w '%{http_code}' \
+  -X PUT \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"API Test Updated","email":"api-test@example.invalid","duration_months":12,"start_date":"2026-02-01"}' \
+  "$base_url/api/customers/$customer_id")"
+test "$update_status" = "200"
+
+delete_status="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "$base_url/api/customers/$customer_id")"
+test "$delete_status" = "204"

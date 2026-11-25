@@ -23,6 +23,6 @@
   },
   "scripts": {
     "test": "phpunit --configuration phpunit.xml",
-    "start": "php -S 127.0.0.1:8080 -t public public/router.php"
+    "start": "php bin/migrate.php && php -S 127.0.0.1:8080 -t public public/router.php"
   }
 }

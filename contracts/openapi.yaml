@@ -20,3 +20,65 @@ paths:
                     type: string
                     enum:
                       - ok
+  /api/customers:
+    get:
+      summary: List customers
+      responses:
+        '200':
+          description: Customer list
+    post:
+      summary: Create customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, duration_months, start_date]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                duration_months:
+                  type: integer
+                  enum: [3, 6, 12]
+                start_date:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Customer created
+        '422':
+          description: Validation error
+  /api/customers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Get customer
+      responses:
+        '200':
+          description: Customer
+        '404':
+          description: Not found
+    put:
+      summary: Update customer
+      responses:
+        '200':
+          description: Customer updated
+        '404':
+          description: Not found
+        '422':
+          description: Validation error
+    delete:
+      summary: Delete customer
+      responses:
+        '204':
+          description: Customer deleted
+        '404':
+          description: Not found
