@@ -118,3 +118,29 @@ paths:
           description: Customer deleted
         '404':
           description: Not found
+  /api/customers/{id}/remind:
+    post:
+      summary: Send a reminder email immediately
+      description: May be called before subscription expiry and replaces reminder_sent with the new send time.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reminder email sent
+        '404':
+          description: Customer not found
+        '409':
+          description: Reminder state changed while sending was requested
+        '419':
+          description: Invalid CSRF token
+        '502':
+          description: SMTP delivery failed

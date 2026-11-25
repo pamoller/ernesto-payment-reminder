@@ -6,6 +6,8 @@ namespace App\Application\Reminder;
 
 use App\Domain\Customer\CustomerRepository;
 use DateTimeImmutable;
+use DateTimeZone;
+use OutOfBoundsException;
 use Throwable;
 
 final class ReminderService
@@ -91,5 +93,75 @@ final class ReminderService
             $resetFailures,
             $claimFailures,
         );
+    }
+
+    public function sendManually(int $customerId, DateTimeImmutable $now): DateTimeImmutable
+    {
+        $customer = $this->customers->findById($customerId);
+        if ($customer === null) {
+            throw new OutOfBoundsException('Customer not found');
+        }
+
+        $subscription = $customer->subscription();
+        $subscriptionId = $subscription->id();
+        if ($subscriptionId === null) {
+            throw new \LogicException('Cannot send a reminder for an unsaved subscription');
+        }
+
+        $sentAt = $now->setTimezone(new DateTimeZone('UTC'));
+        $previousSentAt = $subscription->reminderSent();
+        if (!$this->customers->trySetReminderSent($subscriptionId, $previousSentAt, $sentAt)) {
+            throw new ReminderClaimConflict('Reminder state changed; reload and try again');
+        }
+
+        $subscription->markReminderSent($sentAt);
+        try {
+            $this->mailer->send($customer);
+        } catch (Throwable $exception) {
+            $this->logger->error(
+                'Manual SMTP reminder failed for customer ' . $customerId,
+                $exception,
+            );
+
+            try {
+                $restored = $this->customers->restoreReminderSent(
+                    $subscriptionId,
+                    $sentAt,
+                    $previousSentAt,
+                );
+                if (!$restored) {
+                    $this->logger->error(
+                        'Failed to restore reminder_sent after manual SMTP failure for subscription '
+                        . $subscriptionId,
+                        $exception,
+                    );
+                    throw new ReminderDeliveryFailed(
+                        'Reminder failed and previous reminder status could not be restored',
+                        $exception,
+                    );
+                }
+            } catch (ReminderDeliveryFailed $resetFailure) {
+                throw $resetFailure;
+            } catch (Throwable $resetException) {
+                $this->logger->error(
+                    'Exception while restoring reminder_sent for subscription ' . $subscriptionId,
+                    $resetException,
+                );
+                throw new ReminderDeliveryFailed(
+                    'Reminder failed and previous reminder status could not be restored',
+                    $resetException,
+                );
+            }
+
+            if ($previousSentAt === null) {
+                $subscription->clearReminderSent();
+            } else {
+                $subscription->markReminderSent($previousSentAt);
+            }
+
+            throw new ReminderDeliveryFailed('Reminder email could not be sent', $exception);
+        }
+
+        return $sentAt;
     }
 }

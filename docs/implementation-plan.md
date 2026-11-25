@@ -20,6 +20,7 @@ Grundlegende Projektstruktur, Kunden-CRUD, Erinnerungsversand und Authentisierun
 - MariaDB-kompatible PDO-Persistenz und lokaler SQLite-Fallback.
 - Erinnerungsmarkierung erfolgt atomisch über `subscriptions.reminder_sent`.
 - SMTP-Ausnahme setzt die eigene atomare Markierung bedingt zurück.
+- Der manuelle Kundenlisten-Knopf darf vor Ablauf und wiederholt versenden; bei Erfolg wird `reminder_sent` aktualisiert.
 - Kunden- und Mutationsrouten sind durch PHP-Sessions und CSRF-Tokens geschützt.
 - Der Administratorzugang wird über `AUTH_USERNAME` und einen Argon2id-Hash in `AUTH_PASSWORD_HASH` konfiguriert.
 
@@ -38,9 +39,10 @@ Grundlegende Projektstruktur, Kunden-CRUD, Erinnerungsversand und Authentisierun
 - Laufzeitvertrag `api-test.sh`: Health sowie Kunden-CRUD erfolgreich.
 - SQLite-Migration und `bin/run-reminders.php`: erfolgreicher Leerlauf ohne Kunden.
 - PHP-Session-Login und geschützte Kundenrouten: Laufzeitvertrag erfolgreich.
+- Manueller Versand: Service- und Repositorytests erfolgreich; echte SMTP-Zustellung bleibt konfigurationsabhängig.
 
 ## Vorgeschlagene nächsten Schritte
 
 1. PHP-Installation prüfen und vorhandene Abhängigkeiten installieren.
 2. Kundenaggregat und CRUD-Use-Cases wurden als vertikaler Slice implementiert.
-3. Authentisierung, CSRF und Login-Ratenbegrenzung ergänzen.
+3. SMTP-Zugangsdaten in der Zielumgebung konfigurieren und die Zustellung mit einer Testadresse manuell abnehmen.

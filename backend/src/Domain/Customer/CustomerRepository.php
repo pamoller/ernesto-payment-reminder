@@ -18,4 +18,16 @@ interface CustomerRepository
     public function tryClaimReminder(int $subscriptionId, \DateTimeImmutable $sentAt): bool;
 
     public function clearReminderSent(int $subscriptionId, \DateTimeImmutable $sentAt): bool;
+
+    public function trySetReminderSent(
+        int $subscriptionId,
+        ?\DateTimeImmutable $expectedSentAt,
+        \DateTimeImmutable $sentAt,
+    ): bool;
+
+    public function restoreReminderSent(
+        int $subscriptionId,
+        \DateTimeImmutable $claimedAt,
+        ?\DateTimeImmutable $previousSentAt,
+    ): bool;
 }

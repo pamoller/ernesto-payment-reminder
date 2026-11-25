@@ -1,0 +1,2 @@
+ALTER TABLE subscriptions
+    MODIFY COLUMN reminder_sent DATETIME(6) NULL DEFAULT NULL;

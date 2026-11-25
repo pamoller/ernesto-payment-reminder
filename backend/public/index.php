@@ -8,8 +8,12 @@ use App\Infrastructure\Database\PdoCustomerRepository;
 use App\Infrastructure\Database\PdoFactory;
 use App\Infrastructure\Http\CustomerController;
 use App\Infrastructure\Http\AuthController;
+use App\Infrastructure\Http\ReminderController;
 use App\Infrastructure\Auth\SessionAuth;
 use App\Infrastructure\Auth\Csrf;
+use App\Application\Reminder\ErrorLogReminderLogger;
+use App\Application\Reminder\ReminderService;
+use App\Infrastructure\Reminder\PhpmailerReminderMailer;
 use Slim\Factory\AppFactory;
 
 require __DIR__ . '/../vendor/autoload.php';
@@ -39,8 +43,25 @@ $app->post('/api/auth/login', [$authController, 'login']);
 $app->post('/api/auth/logout', [$authController, 'logout']);
 
 $pdo = PdoFactory::create();
+$customerRepository = new PdoCustomerRepository($pdo);
 $customerController = new CustomerController(
-    new CustomerService(new PdoCustomerRepository($pdo)),
+    new CustomerService($customerRepository),
+);
+$reminderController = new ReminderController(
+    new ReminderService(
+        $customerRepository,
+        new PhpmailerReminderMailer(
+            getenv('SMTP_HOST') ?: '',
+            (int) (getenv('SMTP_PORT') ?: 587),
+            getenv('SMTP_USER') ?: '',
+            getenv('SMTP_PASSWORD') ?: '',
+            getenv('SMTP_FROM') ?: '',
+            getenv('SMTP_FROM_NAME') ?: 'Ernesto',
+            getenv('ADMIN_EMAIL') ?: '',
+            getenv('SMTP_SECURE') ?: 'tls',
+        ),
+        new ErrorLogReminderLogger(),
+    ),
 );
 
 $app->get('/api/customers', [$customerController, 'list'])->add(new SessionAuth());
@@ -48,4 +69,5 @@ $app->post('/api/customers', [$customerController, 'create'])->add(new SessionAu
 $app->get('/api/customers/{id}', [$customerController, 'get'])->add(new SessionAuth());
 $app->put('/api/customers/{id}', [$customerController, 'update'])->add(new SessionAuth());
 $app->delete('/api/customers/{id}', [$customerController, 'delete'])->add(new SessionAuth());
+$app->post('/api/customers/{id}/remind', [$reminderController, 'send'])->add(new SessionAuth());
 $app->run();

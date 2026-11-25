@@ -55,7 +55,9 @@ final class PdoCustomerRepository implements CustomerRepository
                      SET duration_months = ?, starts_at = ?, reminder_sent = ?, updated_at = ?
                      WHERE customer_id = ?',
                 );
-                $reminderSent = $subscription->reminderSent()?->format('Y-m-d H:i:s');
+                $reminderSent = $subscription->reminderSent() === null
+                    ? null
+                    : $this->formatTimestamp($subscription->reminderSent());
                 $statement->execute([
                     $subscription->durationMonths(),
                     $subscription->startsAt()->format('Y-m-d H:i:s'),
@@ -122,9 +124,10 @@ final class PdoCustomerRepository implements CustomerRepository
              SET reminder_sent = ?, updated_at = ?
              WHERE id = ? AND reminder_sent IS NULL',
         );
+        $timestamp = $this->formatTimestamp($sentAt);
         $statement->execute([
-            $sentAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
-            $sentAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+            $timestamp,
+            $timestamp,
             $subscriptionId,
         ]);
         return $statement->rowCount() > 0;
@@ -132,18 +135,65 @@ final class PdoCustomerRepository implements CustomerRepository
 
     public function clearReminderSent(int $subscriptionId, DateTimeImmutable $sentAt): bool
     {
-        $timestamp = $sentAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        return $this->restoreReminderSent($subscriptionId, $sentAt, null);
+    }
+
+    public function trySetReminderSent(
+        int $subscriptionId,
+        ?DateTimeImmutable $expectedSentAt,
+        DateTimeImmutable $sentAt,
+    ): bool {
+        $timestamp = $this->formatTimestamp($sentAt);
+        $updatedAt = (new DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        if ($expectedSentAt === null) {
+            $statement = $this->pdo->prepare(
+                'UPDATE subscriptions
+                 SET reminder_sent = ?, updated_at = ?
+                 WHERE id = ? AND reminder_sent IS NULL',
+            );
+            $statement->execute([$timestamp, $updatedAt, $subscriptionId]);
+        } else {
+            $statement = $this->pdo->prepare(
+                'UPDATE subscriptions
+                 SET reminder_sent = ?, updated_at = ?
+                 WHERE id = ? AND (reminder_sent = ? OR reminder_sent = ?)',
+            );
+            $statement->execute([
+                $timestamp,
+                $updatedAt,
+                $subscriptionId,
+                $this->formatTimestamp($expectedSentAt),
+                $expectedSentAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+            ]);
+        }
+        return $statement->rowCount() > 0;
+    }
+
+    public function restoreReminderSent(
+        int $subscriptionId,
+        DateTimeImmutable $claimedAt,
+        ?DateTimeImmutable $previousSentAt,
+    ): bool {
+        $claimedTimestamp = $this->formatTimestamp($claimedAt);
+        $updatedAt = (new DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        $restoreTimestamp = $previousSentAt === null ? null : $this->formatTimestamp($previousSentAt);
         $statement = $this->pdo->prepare(
-            'UPDATE subscriptions
-             SET reminder_sent = NULL, updated_at = ?
-             WHERE id = ? AND reminder_sent = ?',
+            'UPDATE subscriptions SET reminder_sent = ?, updated_at = ?
+             WHERE id = ? AND (reminder_sent = ? OR reminder_sent = ?)',
         );
         $statement->execute([
-            (new DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s'),
+            $restoreTimestamp,
+            $updatedAt,
             $subscriptionId,
-            $timestamp,
+            $claimedTimestamp,
+            $claimedAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
         ]);
         return $statement->rowCount() > 0;
+    }
+
+    private function formatTimestamp(DateTimeImmutable $timestamp): string
+    {
+        return $timestamp->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
     }
 
     /** @param array<string, mixed> $row */

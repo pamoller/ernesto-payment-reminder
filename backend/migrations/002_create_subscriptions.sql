@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     customer_id BIGINT UNSIGNED NOT NULL,
     duration_months SMALLINT UNSIGNED NOT NULL,
     starts_at DATETIME NOT NULL,
-    reminder_sent DATETIME NULL DEFAULT NULL,
+    reminder_sent DATETIME(6) NULL DEFAULT NULL,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     PRIMARY KEY (id),

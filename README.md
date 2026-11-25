@@ -34,6 +34,8 @@ php bin/run-reminders.php
 
 Der Cronjob darf den Vorgang wiederholt ausführen. Bereits versendete Erinnerungen werden über `subscriptions.reminder_sent` nicht erneut ausgelöst.
 
+In der Kundenliste kann über **Remind** unabhängig vom Ablaufdatum sofort eine E-Mail ausgelöst werden. Ein erfolgreicher manueller Versand setzt `reminder_sent` auf den neuen Versandzeitpunkt; bei SMTP-Fehler bleibt der vorherige Versandzeitpunkt erhalten.
+
 ## Authentifizierung
 
 Der Administratorzugang wird ausschließlich über Umgebungsvariablen konfiguriert:
@@ -58,6 +60,19 @@ composer db:bootstrap
 Die Werte `DB_PASSWORD`, `DB_ADMIN_USER`, `DB_ADMIN_PASSWORD`, `BOOTSTRAP_USER` und `BOOTSTRAP_PASSWORD` werden aus `backend/.env` oder der Prozessumgebung gelesen. Die Anwendung verwendet `ernesto` mit nur `SELECT`, `INSERT`, `UPDATE` und `DELETE`; `ernesto_admin` führt Schema-Migrationen aus und erhält dafür Datenbankverwaltungsrechte.
 
 ## Tests
+
+Task targets for local development:
+
+```bash
+task db:init
+task start
+task backend:start
+task frontend:start
+task remind
+task test
+```
+
+`task db:reset` deletes the configured database. It requires the exact database name as confirmation, for example `CONFIRM_DB_RESET=ernesto_subscriptions task db:reset`.
 
 ```bash
 cd backend

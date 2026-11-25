@@ -13,9 +13,11 @@ type Customer = {
 
 const customers = ref<Customer[]>([])
 const error = ref('')
+const success = ref('')
 const username = ref('')
 const authenticated = ref(false)
 const csrfToken = ref('')
+const remindingId = ref<number | null>(null)
 const loginUsername = ref('')
 const loginPassword = ref('')
 const editingId = ref<number | null>(null)
@@ -146,6 +148,31 @@ async function deleteCustomer(customer: Customer): Promise<void> {
   }
 }
 
+async function remindCustomer(customer: Customer): Promise<void> {
+  error.value = ''
+  success.value = ''
+  remindingId.value = customer.id
+  try {
+    const response = await fetch(`/api/customers/${customer.id}/remind`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-Token': csrfToken.value },
+    })
+    const body = await response.json() as { error?: string; reminder_sent?: string }
+    if (!response.ok) throw new Error(body.error ?? 'Reminder konnte nicht versendet werden')
+    if (!body.reminder_sent) throw new Error('Backend lieferte keinen Versandzeitpunkt zurück')
+
+    customers.value = customers.value.map((current) => current.id === customer.id
+      ? { ...current, reminder_sent: body.reminder_sent }
+      : current)
+    success.value = `Reminder-E-Mail an ${customer.email} wurde versendet.`
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
+  } finally {
+    remindingId.value = null
+  }
+}
+
 onMounted(async () => {
   try {
     await loadSession()
@@ -170,6 +197,7 @@ onMounted(async () => {
     </form>
 
     <p v-if="error" role="alert">{{ error }}</p>
+    <p v-if="success" role="status">{{ success }}</p>
 
     <template v-if="authenticated">
       <p>Angemeldet als {{ username }}</p>
@@ -204,6 +232,7 @@ onMounted(async () => {
           <th>Laufzeit</th>
           <th>Startdatum</th>
           <th>Ablaufdatum</th>
+          <th>Reminder gesendet</th>
           <th>Aktionen</th>
         </tr>
       </thead>
@@ -214,7 +243,15 @@ onMounted(async () => {
           <td>{{ customer.duration_months }} Monate</td>
           <td>{{ customer.start_date }}</td>
           <td>{{ customer.expires_at }}</td>
+          <td>{{ customer.reminder_sent ?? 'Noch nicht gesendet' }}</td>
           <td>
+            <button
+              type="button"
+              :disabled="remindingId === customer.id"
+              @click="remindCustomer(customer)"
+            >
+              {{ remindingId === customer.id ? 'Sende …' : 'Remind' }}
+            </button>
             <button type="button" @click="editCustomer(customer)">Bearbeiten</button>
             <button type="button" @click="deleteCustomer(customer)">Löschen</button>
           </td>

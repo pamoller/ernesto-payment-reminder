@@ -1,0 +1,70 @@
+version: '3'
+
+tasks:
+  "db:init":
+    desc: Create database/accounts if needed and apply schema migrations
+    dir: backend
+    cmds:
+      - |
+        driver="$(php -r 'require "vendor/autoload.php"; App\Infrastructure\Database\PdoFactory::loadEnv(); $dsn = getenv("DB_DSN") ?: ""; echo str_starts_with($dsn, "mysql:") ? "mysql" : "sqlite";')"
+        if [ "$driver" = "mysql" ]; then
+          php bin/bootstrap-database.php
+        fi
+        php bin/migrate.php
+
+  "db:reset":
+    desc: Destructively reset the configured database (requires confirmation)
+    dir: backend
+    cmds:
+      - php bin/reset-database.php
+      - task: "db:init"
+
+  "db:migrate":
+    desc: Apply pending schema migrations
+    dir: backend
+    cmds:
+      - php bin/migrate.php
+
+  "backend:start":
+    desc: Initialize the database and start the local PHP backend
+    deps:
+      - "db:init"
+    dir: backend
+    cmds:
+      - php -S 127.0.0.1:8080 -t public public/router.php
+
+  "backend:test":
+    desc: Run backend PHPUnit tests
+    dir: backend
+    cmds:
+      - php vendor/bin/phpunit
+
+  "frontend:start":
+    desc: Start the Vite development server
+    dir: frontend
+    cmds:
+      - npm run dev
+
+  start:
+    desc: Start both local development servers
+    deps:
+      - "frontend:start"
+      - "backend:start"
+
+  "frontend:test":
+    desc: Run frontend tests
+    dir: frontend
+    cmds:
+      - npm test
+
+  remind:
+    desc: Run the due-subscription reminder job once
+    dir: backend
+    cmds:
+      - php bin/run-reminders.php
+
+  test:
+    desc: Run backend and frontend tests
+    deps:
+      - "backend:test"
+      - "frontend:test"

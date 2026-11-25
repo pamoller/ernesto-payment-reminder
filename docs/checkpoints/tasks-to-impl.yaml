@@ -4,60 +4,60 @@ metadata:
   last_updated: "2026-11-25"
 
 summary:
-  total_tasks: 4
-  completed_tasks: 4
+  total_tasks: 1
+  completed_tasks: 1
   in_progress_tasks: 0
   pending_tasks: 0
   completion_percentage: 100.0
 
 tasks:
-  - task_id: "T004"
-    description: "Protect customer API and UI with session authentication"
+  - task_id: "T005"
+    description: "Add manual immediate reminder action to customer management"
     status: "completed"
     implementation:
       files_changed:
-        - file: "backend/src/Infrastructure/Http/AuthController.php"
-          changes:
-            - change_type: "created"
-              description: "Added session login, logout and CSRF token endpoints"
-        - file: "backend/src/Infrastructure/Auth/"
-          changes:
-            - change_type: "created"
-              description: "Added session authorization and CSRF middleware"
-        - file: "backend/public/index.php"
+        - file: "backend/src/Application/Reminder/ReminderService.php"
           changes:
             - change_type: "modified"
-              description: "Configured secure sessions and protected customer routes"
+              description: "Added manual send behavior with previous-state restoration"
+        - file: "backend/src/Infrastructure/Http/ReminderController.php"
+          changes:
+            - change_type: "created"
+              description: "Added authenticated manual reminder endpoint"
         - file: "frontend/src/App.vue"
           changes:
             - change_type: "modified"
-              description: "Added login/logout UI and CSRF request headers"
+              description: "Added Remind button and send status"
+        - file: "backend/migrations/004_reminder_sent_precision.sql"
+          changes:
+            - change_type: "created"
+              description: "Added microsecond precision to reminder timestamp"
     verification:
       build_passed: true
       test_results:
-        command: "php vendor/bin/phpunit; npm test; npm run build"
-        passed: 17
+        command: "cd backend && php vendor/bin/phpunit; cd frontend && npm test && npm run build"
+        passed: 24
         failed: 0
         skipped: 0
         failures: []
-      notes: "Argon2id login, session protection and CSRF contract pass"
+      notes: "MariaDB migration applied; live SMTP delivery intentionally not invoked"
     upstream_trace:
-      plan_item: "Authentifizierung"
-      requirements: ["REQ-AUTH"]
-      full_trace: "REQ-AUTH -> Authentifizierung -> T004"
+      plan_item: "Manueller Erinnerungsversand"
+      requirements: ["REQ-MANUAL-REMINDER"]
+      full_trace: "REQ-MANUAL-REMINDER -> Manueller Erinnerungsversand -> T005"
 
 pending_tasks: []
 untracked_changes: []
 traceability_chain:
-  - chain_id: "TRACE-004"
-    requirement: "REQ-AUTH"
-    plan_phase: "Slice 4"
-    plan_item: "Authentifizierung"
-    tasks: ["T004"]
+  - chain_id: "TRACE-005"
+    requirement: "REQ-MANUAL-REMINDER"
+    plan_phase: "Slice 5"
+    plan_item: "Manueller Erinnerungsversand"
+    tasks: ["T005"]
     files:
-      - "backend/src/Infrastructure/Http/AuthController.php"
-      - "backend/src/Infrastructure/Auth/"
-      - "backend/public/index.php"
+      - "backend/src/Application/Reminder/ReminderService.php"
+      - "backend/src/Infrastructure/Http/ReminderController.php"
+      - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
       - "frontend/src/App.vue"
     status: "complete"
 
@@ -65,5 +65,5 @@ validation:
   passed: true
   errors: []
   warnings:
-    - "Production HTTPS cookie behavior and reverse-proxy forwarding require deployment verification."
+    - "Real SMTP delivery was not invoked to avoid sending an email to a real customer."
   blocking_issues: []

@@ -117,7 +117,7 @@ final class CustomerService
             'duration_months' => $subscription->durationMonths(),
             'start_date' => $subscription->startsAt()->format('Y-m-d'),
             'expires_at' => $subscription->expiresAt()->format('Y-m-d'),
-            'reminder_sent' => $subscription->reminderSent()?->format(DATE_ATOM),
+            'reminder_sent' => $subscription->reminderSent()?->format('Y-m-d\TH:i:s.uP'),
         ];
     }
 }

@@ -101,4 +101,42 @@ final class PdoCustomerRepositoryTest extends TestCase
             $claimedAt,
         ));
     }
+
+    public function testManualReminderUpdateUsesPreviousSentTimeAsCompareValue(): void
+    {
+        $customer = Customer::create(
+            'Ada Lovelace',
+            'ada@example.com',
+            Subscription::create(12, new DateTimeImmutable('2026-01-01T00:00:00Z')),
+        );
+        $saved = $this->repository->save($customer);
+        $subscriptionId = (int) $saved->subscription()->id();
+        $previousSentAt = new DateTimeImmutable('2026-02-01T00:00:00Z');
+        $claimedAt = new DateTimeImmutable('2026-02-02T00:00:00.123456Z');
+
+        $statement = $this->pdo->prepare('UPDATE subscriptions SET reminder_sent = ? WHERE id = ?');
+        $statement->execute([$previousSentAt->format('Y-m-d H:i:s'), $subscriptionId]);
+
+        self::assertTrue($this->repository->trySetReminderSent(
+            $subscriptionId,
+            $previousSentAt,
+            $claimedAt,
+        ));
+        self::assertFalse($this->repository->trySetReminderSent(
+            $subscriptionId,
+            $previousSentAt,
+            new DateTimeImmutable('2026-02-02T00:00:01Z'),
+        ));
+        self::assertTrue($this->repository->restoreReminderSent(
+            $subscriptionId,
+            $claimedAt,
+            $previousSentAt,
+        ));
+
+        $restored = $this->repository->findById((int) $saved->id());
+        self::assertSame(
+            '2026-02-01T00:00:00+00:00',
+            $restored?->subscription()->reminderSent()?->format(DATE_ATOM),
+        );
+    }
 }

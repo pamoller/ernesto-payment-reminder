@@ -1,101 +1,71 @@
-batch_id: "B04"
-completed_tasks: ["T004"]
+batch_id: "B05"
+completed_tasks: ["T005"]
 blocked_tasks: []
 files_changed:
-  T004:
-    - file: "backend/src/Infrastructure/Http/AuthController.php"
-      change_type: "created"
-      description: "Added login, logout and session endpoints"
-    - file: "backend/src/Infrastructure/Auth/"
-      change_type: "created"
-      description: "Added session authorization and CSRF middleware"
-    - file: "backend/public/index.php"
-      change_type: "modified"
-      description: "Configured secure sessions and protected customer routes"
+  T005:
     - file: "frontend/src/App.vue"
       change_type: "modified"
-      description: "Added login/logout and CSRF-aware CRUD requests"
+      description: "Added per-customer Remind action and latest sent timestamp display"
+    - file: "backend/src/Application/Reminder/ReminderService.php"
+      change_type: "modified"
+      description: "Added manual send flow supporting early/repeat sends and restoring prior state on failure"
+    - file: "backend/src/Infrastructure/Http/ReminderController.php"
+      change_type: "created"
+      description: "Added protected POST /api/customers/{id}/remind endpoint"
+    - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
+      change_type: "modified"
+      description: "Added conditional timestamp replacement and restoration"
+    - file: "backend/migrations/004_reminder_sent_precision.sql"
+      change_type: "created"
+      description: "Added microsecond timestamp precision for claims"
     - file: "contracts/openapi.yaml"
       change_type: "modified"
-      description: "Documented authentication endpoints"
-    - file: "api-test.sh"
-      change_type: "modified"
-      description: "Added unauthenticated, login and protected CRUD contract checks"
+      description: "Documented manual reminder endpoint"
 upstream_artifacts_consumed:
-  T004:
-    - artifact: "docs/ai-plan.md#6"
-      used_for: "Argon2id, PHP sessions and CSRF security requirements"
-    - artifact: "docs/ai-plan.md#9"
-      used_for: "Incremental approved authentication slice"
+  T005:
+    - artifact: "docs/ai-plan.md#5"
+      used_for: "Reminder timestamp and SMTP failure behavior"
+    - artifact: "user decision"
+      used_for: "Manual send allowed before expiry and replaces sent timestamp"
 evidence_mapping:
-  T004:
-    - upstream: "docs/ai-plan.md#Sicherheit"
-      output: "backend/src/Infrastructure/Http/AuthController.php"
-      evidence: "backend/tests/Infrastructure/Http/AuthControllerTest.php"
-    - upstream: "contracts/openapi.yaml"
-      output: "backend/public/index.php"
-      evidence: "api-test.sh"
+  T005:
+    - upstream: "user decision"
+      output: "backend/src/Application/Reminder/ReminderService.php"
+      evidence: "ReminderServiceTest::testManualReminderSendsBeforeExpiryAndReplacesPreviousSentDate"
+    - upstream: "user decision"
+      output: "frontend/src/App.vue"
+      evidence: "App.test.ts manual-remind test passes"
 traceability:
-  - requirement: "REQ-AUTH"
-    plan_item: "Authentifizierung"
-    task: "T004"
+  - requirement: "REQ-MANUAL-REMINDER"
+    plan_item: "Manueller Erinnerungsversand"
+    task: "T005"
     files:
-      - "backend/src/Infrastructure/Http/AuthController.php"
-      - "backend/src/Infrastructure/Auth/"
-      - "backend/public/index.php"
+      - "backend/src/Application/Reminder/ReminderService.php"
+      - "backend/src/Infrastructure/Http/ReminderController.php"
+      - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
       - "frontend/src/App.vue"
     status: "completed"
 protocol_violation: false
 errors: []
 warnings:
   - severity: MEDIUM
-    message: "The login rate limit is session-local; production distributed rate limiting was not added."
-  - severity: MEDIUM
-    message: "Production HTTPS and reverse-proxy cookie settings require deployment verification."
-required_endpoints:
-  - method: GET
-    path: /api/auth/session
-    source: api-test.sh
-    status: implemented
-  - method: POST
-    path: /api/auth/login
-    source: api-test.sh
-    status: implemented
-  - method: POST
-    path: /api/auth/logout
-    source: api-test.sh
-    status: implemented
-endpoint_probes:
-  - method: GET
-    path: /api/auth/session
-    status: 200
-    result: PASS
-  - method: POST
-    path: /api/auth/login
-    status: 200
-    result: PASS
-  - method: GET
-    path: /api/customers
-    status: 401
-    result: PASS
-  - method: POST
-    path: /api/customers
-    status: 201
-    result: PASS
+    message: "Real SMTP delivery was not invoked; configure SMTP credentials and verify using an approved test mailbox."
+required_endpoints: []
+endpoint_probes: []
 test_results:
-  T004_BACKEND:
+  T005_BACKEND:
     command: "cd backend && php vendor/bin/phpunit"
-    passed: 17
+    passed: 21
     failed: 0
     skipped: 0
     failures: []
-  T004_FRONTEND:
+  T005_FRONTEND:
     command: "cd frontend && npm test"
-    passed: 1
+    passed: 3
     failed: 0
     skipped: 0
     failures: []
-  T004_BUILD:
+  T005_BUILD:
     command: "cd frontend && npm run build"
     passed: 1
     failed: 0

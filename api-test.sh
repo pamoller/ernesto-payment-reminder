@@ -35,6 +35,7 @@ php -r '$body=json_decode(file_get_contents("/tmp/ernesto-health.json"), true, 5
 unauth_status="$(curl -sS -o /dev/null -w '%{http_code}' "$base_url/api/customers")"
 require_status unauthenticated-customers 401 "$unauth_status"
 
+: > /tmp/ernesto-cookies.txt
 session_status="$(curl -sS -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt \
   -o /tmp/ernesto-session.json -w '%{http_code}' "$base_url/api/auth/session")"
 require_status auth-session 200 "$session_status"
@@ -49,6 +50,8 @@ login_status="$(curl -sS -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt
   -d "$(AUTH_TEST_USERNAME="$auth_test_username" AUTH_TEST_PASSWORD="$auth_test_password" php -r 'echo json_encode(["username" => getenv("AUTH_TEST_USERNAME"), "password" => getenv("AUTH_TEST_PASSWORD")], JSON_THROW_ON_ERROR);')" \
   "$base_url/api/auth/login")"
 require_status login 200 "$login_status"
+csrf_token="$(php -r '$body=json_decode(file_get_contents("/tmp/ernesto-login.json"), true, 512, JSON_THROW_ON_ERROR); echo $body["csrf_token"] ?? "";')"
+test -n "$csrf_token"
 
 create_status="$(curl -sS -o /tmp/ernesto-customer.json -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt \
