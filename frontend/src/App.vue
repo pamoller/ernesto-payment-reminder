@@ -169,7 +169,9 @@ onMounted(async () => {
       <button type="submit">Anmelden</button>
     </form>
 
-    <template v-else>
+    <p v-if="error" role="alert">{{ error }}</p>
+
+    <template v-if="authenticated">
       <p>Angemeldet als {{ username }}</p>
       <button type="button" @click="logout">Abmelden</button>
 
@@ -193,8 +195,6 @@ onMounted(async () => {
       <button type="submit">{{ editingId === null ? 'Kunde hinzufügen' : 'Kunde speichern' }}</button>
       <button v-if="editingId !== null" type="button" @click="resetForm">Abbrechen</button>
     </form>
-
-      <p v-if="error" role="alert">{{ error }}</p>
 
       <table>
       <thead>

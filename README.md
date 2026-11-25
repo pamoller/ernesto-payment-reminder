@@ -46,6 +46,17 @@ export AUTH_PASSWORD_HASH
 
 Das Hash wird in `AUTH_PASSWORD_HASH` gesetzt. Das Klartextpasswort wird weder im Repository noch in der Anwendung gespeichert.
 
+## Datenbank-Bootstrap
+
+Mit einem MariaDB-Administrationszugang werden die Datenbank und beide Anwendungskonten angelegt:
+
+```bash
+cd backend
+composer db:bootstrap
+```
+
+Die Werte `DB_PASSWORD`, `DB_ADMIN_USER`, `DB_ADMIN_PASSWORD`, `BOOTSTRAP_USER` und `BOOTSTRAP_PASSWORD` werden aus `backend/.env` oder der Prozessumgebung gelesen. Die Anwendung verwendet `ernesto` mit nur `SELECT`, `INSERT`, `UPDATE` und `DELETE`; `ernesto_admin` führt Schema-Migrationen aus und erhält dafür Datenbankverwaltungsrechte.
+
 ## Tests
 
 ```bash

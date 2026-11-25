@@ -6,7 +6,7 @@ require __DIR__ . '/../vendor/autoload.php';
 
 use App\Infrastructure\Database\PdoFactory;
 
-$pdo = PdoFactory::create();
+$pdo = PdoFactory::createForMigrations();
 
 if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
     $pdo->exec(
