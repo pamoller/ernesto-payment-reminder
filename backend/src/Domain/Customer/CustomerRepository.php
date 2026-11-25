@@ -14,4 +14,8 @@ interface CustomerRepository
     public function all(): array;
 
     public function delete(int $id): bool;
+
+    public function tryClaimReminder(int $subscriptionId, \DateTimeImmutable $sentAt): bool;
+
+    public function clearReminderSent(int $subscriptionId, \DateTimeImmutable $sentAt): bool;
 }

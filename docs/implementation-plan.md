@@ -1,8 +1,7 @@
 # Implementierungsplan
 
 ## Aktueller Entwicklungsschritt
-
-Grundlegende Projektstruktur und vollständiger Kunden-CRUD-Slice.
+Grundlegende Projektstruktur, Kunden-CRUD und Erinnerungsversand-Slice.
 
 ## Freigegebene Architekturentscheidungen
 
@@ -19,6 +18,8 @@ Grundlegende Projektstruktur und vollständiger Kunden-CRUD-Slice.
 - Kunden-CRUD über REST und Vue-Oberfläche.
 - Laufzeit 3, 6 oder 12 Monate und Startdatum pro Abonnement.
 - MariaDB-kompatible PDO-Persistenz und lokaler SQLite-Fallback.
+- Erinnerungsmarkierung erfolgt atomisch über `subscriptions.reminder_sent`.
+- SMTP-Ausnahme setzt die eigene atomare Markierung bedingt zurück.
 
 ## Offene fachliche Fragen
 
@@ -29,9 +30,11 @@ Grundlegende Projektstruktur und vollständiger Kunden-CRUD-Slice.
 ## Teststatus
 
 - Backend-Domain- und PDO-Repositorytests: 5 Tests, 16 Assertions erfolgreich.
+- Erinnerungs-Slice: 14 Backend-Tests, 44 Assertions erfolgreich.
 - Frontend-Vue-Test: 1 Test erfolgreich.
 - Frontend-Produktionsbuild erfolgreich.
 - Laufzeitvertrag `api-test.sh`: Health sowie Kunden-CRUD erfolgreich.
+- SQLite-Migration und `bin/run-reminders.php`: erfolgreicher Leerlauf ohne Kunden.
 
 ## Vorgeschlagene nächsten Schritte
 

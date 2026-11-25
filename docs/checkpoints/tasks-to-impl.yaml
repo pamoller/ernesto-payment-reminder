@@ -4,25 +4,25 @@ metadata:
   last_updated: "2026-11-25"
 
 summary:
-  total_tasks: 2
-  completed_tasks: 2
+  total_tasks: 3
+  completed_tasks: 3
   in_progress_tasks: 0
   pending_tasks: 0
   completion_percentage: 100.0
 
 tasks:
   - task_id: "T001"
-    description: "Create project foundation and GET /api/health vertical slice"
+    description: "Create project foundation and health endpoint"
     status: "completed"
     verification:
       build_passed: true
       test_results:
         command: "php vendor/bin/phpunit"
-        passed: 5
+        passed: 14
         failed: 0
         skipped: 0
         failures: []
-      notes: "Health and customer domain/repository tests pass"
+      notes: "Foundation, CRUD and reminder tests pass"
     upstream_trace:
       plan_item: "Phase 1"
       requirements: ["REQ-HEALTH"]
@@ -31,24 +31,6 @@ tasks:
   - task_id: "T002"
     description: "Implement customer CRUD with subscription data"
     status: "completed"
-    implementation:
-      files_changed:
-        - file: "backend/src/Domain/Customer/"
-          changes:
-            - change_type: "created"
-              description: "Added rich Customer and Subscription domain model"
-        - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
-          changes:
-            - change_type: "created"
-              description: "Added prepared PDO persistence"
-        - file: "backend/src/Infrastructure/Http/CustomerController.php"
-          changes:
-            - change_type: "created"
-              description: "Added customer REST handlers"
-        - file: "frontend/src/App.vue"
-          changes:
-            - change_type: "modified"
-              description: "Added customer CRUD interface"
     verification:
       build_passed: true
       test_results:
@@ -57,32 +39,66 @@ tasks:
         failed: 0
         skipped: 0
         failures: []
-      notes: "Health and customer CRUD endpoints passed at runtime"
+      notes: "Customer CRUD runtime contract passed"
     upstream_trace:
       plan_item: "Kunden-CRUD"
       requirements: ["REQ-CUSTOMERS"]
       full_trace: "REQ-CUSTOMERS -> Kunden-CRUD -> T002"
 
+  - task_id: "T003"
+    description: "Implement automatic subscription reminder sending"
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "backend/src/Application/Reminder/"
+          changes:
+            - change_type: "created"
+              description: "Added reminder orchestration, ports and result reporting"
+        - file: "backend/src/Infrastructure/Reminder/"
+          changes:
+            - change_type: "created"
+              description: "Added PHPMailer adapter and duration-specific templates"
+        - file: "backend/bin/run-reminders.php"
+          changes:
+            - change_type: "created"
+              description: "Added repeatable cron entry point"
+        - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
+          changes:
+            - change_type: "modified"
+              description: "Added atomic claim and conditional reset operations"
+    verification:
+      build_passed: true
+      test_results:
+        command: "php vendor/bin/phpunit"
+        passed: 14
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "Due, already-sent, claim, SMTP, reset and template cases pass"
+    upstream_trace:
+      plan_item: "Erinnerungsversand"
+      requirements: ["REQ-REMINDER"]
+      full_trace: "REQ-REMINDER -> Erinnerungsversand -> T003"
+
 pending_tasks: []
 untracked_changes: []
 traceability_chain:
-  - chain_id: "TRACE-002"
-    requirement: "REQ-CUSTOMERS"
-    plan_phase: "Slice 2"
-    plan_item: "Kunden-CRUD"
-    tasks: ["T002"]
+  - chain_id: "TRACE-003"
+    requirement: "REQ-REMINDER"
+    plan_phase: "Slice 3"
+    plan_item: "Erinnerungsversand"
+    tasks: ["T003"]
     files:
-      - "backend/src/Domain/Customer/"
-      - "backend/src/Application/Customer/CustomerService.php"
+      - "backend/src/Application/Reminder/"
+      - "backend/src/Infrastructure/Reminder/"
       - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
-      - "backend/src/Infrastructure/Http/CustomerController.php"
-      - "frontend/src/App.vue"
+      - "backend/bin/run-reminders.php"
     status: "complete"
 
 validation:
   passed: true
   errors: []
   warnings:
-    - "The local MariaDB socket was unavailable; runtime verification used the SQLite fallback."
-    - "Customer routes are not yet password-protected; authentication remains in the next approved slice."
+    - "No real SMTP server was used; SMTP delivery is verified with test doubles."
+    - "Authentication remains outside this reminder slice."
   blocking_issues: []

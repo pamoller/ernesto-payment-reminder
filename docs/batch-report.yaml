@@ -1,128 +1,73 @@
-batch_id: "B02"
-completed_tasks: ["T002"]
+batch_id: "B03"
+completed_tasks: ["T003"]
 blocked_tasks: []
 files_changed:
-  T002:
-    - file: "backend/src/Domain/Customer/"
+  T003:
+    - file: "backend/src/Application/Reminder/"
       change_type: "created"
-      description: "Added Customer, Subscription and repository interface"
-    - file: "backend/src/Application/Customer/CustomerService.php"
+      description: "Added reminder use-case orchestration and ports"
+    - file: "backend/src/Infrastructure/Reminder/"
       change_type: "created"
-      description: "Added CRUD orchestration and validation"
-    - file: "backend/src/Infrastructure/Database/"
+      description: "Added SMTP adapter and duration templates"
+    - file: "backend/bin/run-reminders.php"
       change_type: "created"
-      description: "Added PDO factory and customer repository"
-    - file: "backend/src/Infrastructure/Http/CustomerController.php"
-      change_type: "created"
-      description: "Added REST customer handlers"
-    - file: "backend/migrations/"
-      change_type: "created"
-      description: "Added MariaDB customer and subscription tables"
-    - file: "frontend/src/App.vue"
+      description: "Added cron entry point"
+    - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
       change_type: "modified"
-      description: "Added customer CRUD interface"
-    - file: "contracts/openapi.yaml"
+      description: "Added conditional claim and reset SQL"
+    - file: "backend/migrations/003_add_reminder_index.sql"
+      change_type: "created"
+      description: "Added reminder status index"
+    - file: "README.md"
       change_type: "modified"
-      description: "Documented customer endpoints"
-    - file: "api-test.sh"
-      change_type: "modified"
-      description: "Added runtime customer CRUD contract"
+      description: "Documented cron and SMTP configuration"
 upstream_artifacts_consumed:
-  T002:
-    - artifact: "docs/ai-plan.md"
-      used_for: "Customer requirements and Clean Architecture constraints"
-    - artifact: "pamoller/ernesto-payment-reminder#1"
-      used_for: "Name, email, duration and start date CRUD fields"
+  T003:
+    - artifact: "docs/ai-plan.md#5"
+      used_for: "Atomic reminder state and SMTP rollback semantics"
+    - artifact: "pamoller/ernesto-payment-reminder#2"
+      used_for: "Duration templates, BCC and one-time reminder behavior"
 evidence_mapping:
-  T002:
-    - upstream: "pamoller/ernesto-payment-reminder#1"
-      output: "backend/src/Domain/Customer/"
-      evidence: "backend/tests/Domain/Customer/CustomerTest.php"
-    - upstream: "contracts/openapi.yaml"
-      output: "backend/src/Infrastructure/Http/CustomerController.php"
-      evidence: "api-test.sh"
+  T003:
+    - upstream: "docs/ai-plan.md#5"
+      output: "backend/src/Application/Reminder/ReminderService.php"
+      evidence: "backend/tests/Application/Reminder/ReminderServiceTest.php"
+    - upstream: "pamoller/ernesto-payment-reminder#2"
+      output: "backend/src/Infrastructure/Reminder/ReminderTemplate.php"
+      evidence: "backend/tests/Infrastructure/Reminder/ReminderTemplateTest.php"
 traceability:
-  - requirement: "REQ-CUSTOMERS"
-    plan_item: "Kunden-CRUD"
-    task: "T002"
+  - requirement: "REQ-REMINDER"
+    plan_item: "Erinnerungsversand"
+    task: "T003"
     files:
-      - "backend/src/Domain/Customer/"
-      - "backend/src/Application/Customer/CustomerService.php"
+      - "backend/src/Application/Reminder/"
+      - "backend/src/Infrastructure/Reminder/"
       - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
-      - "backend/src/Infrastructure/Http/CustomerController.php"
-      - "frontend/src/App.vue"
+      - "backend/bin/run-reminders.php"
     status: "completed"
 protocol_violation: false
 errors: []
 warnings:
   - severity: MEDIUM
-    message: "The local MariaDB socket was unavailable; runtime verification used the documented SQLite fallback."
+    message: "No real SMTP server was used; delivery is covered by test doubles only."
   - severity: MEDIUM
-    message: "Customer routes are not yet password-protected; authentication remains in the next approved slice."
-required_endpoints:
-  - method: GET
-    path: /api/health
-    source: api-test.sh
-    status: implemented
-  - method: POST
-    path: /api/customers
-    source: api-test.sh
-    status: implemented
-  - method: GET
-    path: /api/customers
-    source: api-test.sh
-    status: implemented
-  - method: GET
-    path: /api/customers/{id}
-    source: api-test.sh
-    status: implemented
-  - method: PUT
-    path: /api/customers/{id}
-    source: api-test.sh
-    status: implemented
-  - method: DELETE
-    path: /api/customers/{id}
-    source: api-test.sh
-    status: implemented
-endpoint_probes:
-  - method: GET
-    path: /api/health
-    status: 200
-    result: PASS
-  - method: POST
-    path: /api/customers
-    status: 201
-    result: PASS
-  - method: GET
-    path: /api/customers
-    status: 200
-    result: PASS
-  - method: GET
-    path: /api/customers/{id}
-    status: 200
-    result: PASS
-  - method: PUT
-    path: /api/customers/{id}
-    status: 200
-    result: PASS
-  - method: DELETE
-    path: /api/customers/{id}
-    status: 204
-    result: PASS
+    message: "Real SMTP delivery and concurrent Cron execution still require production configuration and operational verification."
+required_endpoints: []
+endpoint_probes: []
 test_results:
-  T002_BACKEND:
+  T003_BACKEND:
     command: "cd backend && php vendor/bin/phpunit"
-    passed: 5
+    passed: 14
     failed: 0
     skipped: 0
     failures: []
-  T002_FRONTEND:
+  T003_FRONTEND:
     command: "cd frontend && npm test"
     passed: 1
     failed: 0
     skipped: 0
     failures: []
-  T002_BUILD:
+  T003_BUILD:
     command: "cd frontend && npm run build"
     passed: 1
     failed: 0

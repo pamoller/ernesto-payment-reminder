@@ -115,6 +115,37 @@ final class PdoCustomerRepository implements CustomerRepository
         return $statement->rowCount() > 0;
     }
 
+    public function tryClaimReminder(int $subscriptionId, DateTimeImmutable $sentAt): bool
+    {
+        $statement = $this->pdo->prepare(
+            'UPDATE subscriptions
+             SET reminder_sent = ?, updated_at = ?
+             WHERE id = ? AND reminder_sent IS NULL',
+        );
+        $statement->execute([
+            $sentAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+            $sentAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+            $subscriptionId,
+        ]);
+        return $statement->rowCount() > 0;
+    }
+
+    public function clearReminderSent(int $subscriptionId, DateTimeImmutable $sentAt): bool
+    {
+        $timestamp = $sentAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        $statement = $this->pdo->prepare(
+            'UPDATE subscriptions
+             SET reminder_sent = NULL, updated_at = ?
+             WHERE id = ? AND reminder_sent = ?',
+        );
+        $statement->execute([
+            (new DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s'),
+            $subscriptionId,
+            $timestamp,
+        ]);
+        return $statement->rowCount() > 0;
+    }
+
     /** @param array<string, mixed> $row */
     private function hydrate(array $row): Customer
     {

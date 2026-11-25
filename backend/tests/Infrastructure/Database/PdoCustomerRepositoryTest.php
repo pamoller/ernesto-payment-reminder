@@ -76,4 +76,29 @@ final class PdoCustomerRepositoryTest extends TestCase
         self::assertTrue($this->repository->delete((int) $saved->id()));
         self::assertNull($this->repository->findById((int) $saved->id()));
     }
+
+    public function testReminderClaimIsAtomicAndResetIsConditional(): void
+    {
+        $customer = Customer::create(
+            'Ada Lovelace',
+            'ada@example.com',
+            Subscription::create(3, new DateTimeImmutable('2026-01-01T00:00:00Z')),
+        );
+        $saved = $this->repository->save($customer);
+        $subscription = $saved->subscription();
+        $subscriptionId = (int) $subscription->id();
+        $claimedAt = new DateTimeImmutable('2026-04-01T12:00:00Z');
+
+        self::assertTrue($this->repository->tryClaimReminder($subscriptionId, $claimedAt));
+        self::assertFalse($this->repository->tryClaimReminder($subscriptionId, $claimedAt));
+
+        self::assertTrue($this->repository->clearReminderSent(
+            $subscriptionId,
+            $claimedAt,
+        ));
+        self::assertFalse($this->repository->clearReminderSent(
+            $subscriptionId,
+            $claimedAt,
+        ));
+    }
 }

@@ -30,6 +30,10 @@ if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
             FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE
         )'
     );
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_subscriptions_reminder_sent
+         ON subscriptions(reminder_sent)'
+    );
     echo "SQLite migration completed\n";
     exit(0);
 }

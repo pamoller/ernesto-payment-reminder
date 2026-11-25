@@ -40,4 +40,15 @@ final class CustomerTest extends TestCase
             Subscription::create(3, new DateTimeImmutable('2026-01-01T00:00:00Z')),
         );
     }
+
+    public function testReminderIsDueOnlyAfterExpiryAndBeforeReminderWasSent(): void
+    {
+        $subscription = Subscription::create(3, new DateTimeImmutable('2026-01-01T00:00:00Z'));
+
+        self::assertFalse($subscription->isReminderDue(new DateTimeImmutable('2026-03-31T23:59:59Z')));
+        self::assertTrue($subscription->isReminderDue(new DateTimeImmutable('2026-04-01T00:00:00Z')));
+
+        $subscription->markReminderSent(new DateTimeImmutable('2026-04-01T00:00:00Z'));
+        self::assertFalse($subscription->isReminderDue(new DateTimeImmutable('2026-04-02T00:00:00Z')));
+    }
 }
