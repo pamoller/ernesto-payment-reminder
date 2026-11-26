@@ -22,15 +22,15 @@ function update(field: keyof typeof props.modelValue, event: Event): void {
 <template>
   <form class="space-y-5" @submit.prevent="emit('submit')">
     <div>
-      <label for="name" class="mb-1 block text-sm font-semibold text-white">Name</label>
+      <label for="name" class="mb-1 block text-sm font-semibold text-slate-800">Name</label>
       <input id="name" :value="modelValue.name" @input="update('name', $event)" required class="w-full rounded border border-slate-300 px-3 py-2" />
     </div>
     <div>
-      <label for="email" class="mb-1 block text-sm font-semibold text-white">E-Mail</label>
+      <label for="email" class="mb-1 block text-sm font-semibold text-slate-800">E-Mail</label>
       <input id="email" type="email" :value="modelValue.email" @input="update('email', $event)" required class="w-full rounded border border-slate-300 px-3 py-2" />
     </div>
     <div>
-      <label for="subscription_type_id" class="mb-1 block text-sm font-semibold text-white">Abonnement</label>
+      <label for="subscription_type_id" class="mb-1 block text-sm font-semibold text-slate-800">Abonnement</label>
       <select id="subscription_type_id" :value="modelValue.subscription_type_id" @change="update('subscription_type_id', $event)" required class="w-full rounded border border-slate-300 px-3 py-2">
         <option v-for="type in subscriptionTypes" :key="type.id" :value="type.id">
           {{ type.name }} ({{ type.duration_months }} Monate)
@@ -38,7 +38,7 @@ function update(field: keyof typeof props.modelValue, event: Event): void {
       </select>
     </div>
     <div>
-      <label for="start_date" class="mb-1 block text-sm font-semibold text-white">Beginn</label>
+      <label for="start_date" class="mb-1 block text-sm font-semibold text-slate-800">Beginn</label>
       <input id="start_date" type="date" :value="modelValue.start_date" @input="update('start_date', $event)" required class="w-full rounded border border-slate-300 px-3 py-2" />
     </div>
     <slot name="actions" :busy="busy" />

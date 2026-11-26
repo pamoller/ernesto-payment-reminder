@@ -33,6 +33,13 @@ final class ReminderController
                 new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
                 $authoriseRepeatedReminder,
             );
+            if ($sentAt === null) {
+                return $this->json($response, [
+                    'sent' => false,
+                    'reset' => true,
+                    'reminder_sent' => null,
+                ]);
+            }
             return $this->json($response, [
                 'sent' => true,
                 'reminder_sent' => $sentAt->format('Y-m-d\TH:i:s.uP'),

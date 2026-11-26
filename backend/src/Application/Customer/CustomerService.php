@@ -134,6 +134,26 @@ final class CustomerService
         return $this->toArray($this->customers->save($customer));
     }
 
+    /** @return array<string, mixed>|null */
+    public function renew(int $id, DateTimeImmutable $startsAt): ?array
+    {
+        $customer = $this->customers->findById($id);
+        if ($customer === null) {
+            return null;
+        }
+
+        $existing = $customer->subscription();
+        $customer->changeSubscription(Subscription::reconstitute(
+            (int) $existing->id(),
+            $existing->subscriptionTypeId(),
+            $existing->durationMonths(),
+            $startsAt,
+            null,
+        ));
+
+        return $this->toArray($this->customers->save($customer));
+    }
+
     public function delete(int $id): bool
     {
         return $this->customers->delete($id);

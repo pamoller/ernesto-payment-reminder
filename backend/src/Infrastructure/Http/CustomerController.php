@@ -76,6 +76,24 @@ final class CustomerController
         }
     }
 
+    public function renew(
+        ServerRequestInterface $request,
+        ResponseInterface $response,
+        array $args,
+    ): ResponseInterface {
+        try {
+            $customer = $this->service->renew(
+                (int) $args['id'],
+                new \DateTimeImmutable('today', new \DateTimeZone('Europe/Berlin')),
+            );
+            return $customer === null
+                ? $this->json($response, ['error' => 'Customer not found'], 404)
+                : $this->json($response, ['customer' => $customer]);
+        } catch (Throwable $exception) {
+            return $this->serverError($response, $exception);
+        }
+    }
+
     public function delete(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         if (!$this->service->delete((int) $args['id'])) {

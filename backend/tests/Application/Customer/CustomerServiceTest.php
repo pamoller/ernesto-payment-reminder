@@ -7,8 +7,10 @@ namespace App\Tests\Application\Customer;
 use App\Application\Customer\CustomerService;
 use App\Domain\Customer\Customer;
 use App\Domain\Customer\CustomerRepository;
+use App\Domain\Customer\Subscription;
 use App\Domain\Customer\SubscriptionType;
 use App\Domain\Customer\SubscriptionTypeRepository;
+use DateTimeImmutable;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
@@ -60,5 +62,33 @@ final class CustomerServiceTest extends TestCase
             'subscription_type_id' => 99,
             'start_date' => '2026-01-01',
         ]);
+    }
+
+    public function testRenewalKeepsDurationAndClearsReminderTimestamp(): void
+    {
+        $subscription = Subscription::reconstitute(
+            12,
+            42,
+            6,
+            new DateTimeImmutable('2026-01-15T00:00:00Z'),
+            new DateTimeImmutable('2026-03-20T09:00:00Z'),
+        );
+        $customer = Customer::reconstitute(7, 'Ada Lovelace', 'ada@example.com', $subscription);
+        $customers = $this->createMock(CustomerRepository::class);
+        $customers->expects(self::once())->method('findById')->with(7)->willReturn($customer);
+        $customers->expects(self::once())->method('save')->willReturnCallback(
+            static fn (Customer $saved): Customer => $saved,
+        );
+
+        $result = (new CustomerService(
+            $customers,
+            $this->createMock(SubscriptionTypeRepository::class),
+        ))->renew(7, new DateTimeImmutable('2026-06-26T00:00:00Z'));
+
+        self::assertNotNull($result);
+        self::assertSame('2026-06-26', $result['start_date']);
+        self::assertSame(6, $result['duration_months']);
+        self::assertSame('2026-12-26', $result['expires_at']);
+        self::assertNull($result['reminder_sent']);
     }
 }

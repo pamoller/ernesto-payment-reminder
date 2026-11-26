@@ -99,7 +99,7 @@ final class ReminderService
         int $customerId,
         DateTimeImmutable $now,
         bool $authoriseRepeatedReminder = false,
-    ): DateTimeImmutable
+    ): ?DateTimeImmutable
     {
         $customer = $this->customers->findById($customerId);
         if ($customer === null) {
@@ -111,15 +111,22 @@ final class ReminderService
         if ($subscriptionId === null) {
             throw new \LogicException('Cannot send a reminder for an unsaved subscription');
         }
-        if ($subscription->reminderSent() !== null && !$authoriseRepeatedReminder) {
-            throw new ReminderAuthorizationRequired(
-                'Eine erneute Erinnerung erfordert eine ausdrückliche Autorisierung',
-            );
+        $previousSentAt = $subscription->reminderSent();
+        if ($previousSentAt !== null) {
+            if (!$authoriseRepeatedReminder) {
+                throw new ReminderAuthorizationRequired(
+                    'Das Zurücksetzen des Erinnerungsstatus erfordert eine ausdrückliche Autorisierung',
+                );
+            }
+            if (!$this->customers->clearReminderSent($subscriptionId, $previousSentAt)) {
+                throw new ReminderClaimConflict('Reminder state changed; reload and try again');
+            }
+            $subscription->clearReminderSent();
+            return null;
         }
 
         $sentAt = $now->setTimezone(new DateTimeZone('UTC'));
-        $previousSentAt = $subscription->reminderSent();
-        if (!$this->customers->trySetReminderSent($subscriptionId, $previousSentAt, $sentAt)) {
+        if (!$this->customers->trySetReminderSent($subscriptionId, null, $sentAt)) {
             throw new ReminderClaimConflict('Reminder state changed; reload and try again');
         }
 

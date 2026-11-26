@@ -74,6 +74,7 @@ $app->get('/api/subscription-types', [$customerController, 'listSubscriptionType
 $app->post('/api/customers', [$customerController, 'create'])->add(new SessionAuth());
 $app->get('/api/customers/{id}', [$customerController, 'get'])->add(new SessionAuth());
 $app->put('/api/customers/{id}', [$customerController, 'update'])->add(new SessionAuth());
+$app->post('/api/customers/{id}/renew', [$customerController, 'renew'])->add(new SessionAuth());
 $app->delete('/api/customers/{id}', [$customerController, 'delete'])->add(new SessionAuth());
 $app->post('/api/customers/{id}/remind', [$reminderController, 'send'])->add(new SessionAuth());
 $app->run();

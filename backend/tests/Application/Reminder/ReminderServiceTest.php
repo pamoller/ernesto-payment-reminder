@@ -9,6 +9,7 @@ use App\Application\Reminder\ReminderMailer;
 use App\Application\Reminder\ReminderLogger;
 use App\Application\Reminder\ReminderClaimConflict;
 use App\Application\Reminder\ReminderDeliveryFailed;
+use App\Application\Reminder\ReminderAuthorizationRequired;
 use App\Domain\Customer\Customer;
 use App\Domain\Customer\CustomerRepository;
 use App\Domain\Customer\Subscription;
@@ -112,24 +113,54 @@ final class ReminderServiceTest extends TestCase
         self::assertGreaterThan(0, $logger->count);
     }
 
-    public function testManualReminderSendsBeforeExpiryAndReplacesPreviousSentDate(): void
+    public function testManualReminderSendsBeforeExpiryWhenNoPreviousReminderExists(): void
     {
-        $previousSent = new DateTimeImmutable('2026-03-15T00:00:00Z');
-        $customer = $this->customer(12, '2026-03-01T00:00:00Z', $previousSent);
+        $customer = $this->customer(12, '2026-03-01T00:00:00Z', null);
         $repo = new FakeReminderRepository([$customer]);
         $mailer = new FakeReminderMailer();
         $sentAt = new DateTimeImmutable('2026-03-20T12:00:00Z');
 
         $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->sendManually(7, $sentAt, true);
+            ->sendManually(7, $sentAt);
 
+        self::assertNotNull($result);
         self::assertSame($sentAt->format(DATE_ATOM), $result->format(DATE_ATOM));
         self::assertSame(1, $mailer->sendCount);
-        self::assertSame(
-            $previousSent->format(DATE_ATOM),
-            $repo->expectedPreviousSentAt?->format(DATE_ATOM),
-        );
+        self::assertNull($repo->expectedPreviousSentAt);
         self::assertSame($sentAt->format(DATE_ATOM), $repo->claimedAt?->format(DATE_ATOM));
+    }
+
+    public function testAuthorisedRepeatedReminderOnlyResetsReminderSent(): void
+    {
+        $previousSent = new DateTimeImmutable('2026-03-15T00:00:00Z');
+        $customer = $this->customer(12, '2026-03-01T00:00:00Z', $previousSent);
+        $repo = new FakeReminderRepository([$customer]);
+        $mailer = new FakeReminderMailer();
+
+        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
+            ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'), true);
+
+        self::assertNull($result);
+        self::assertSame(1, $repo->clearCount);
+        self::assertNull($customer->subscription()->reminderSent());
+        self::assertSame(0, $mailer->sendCount);
+    }
+
+    public function testRepeatedReminderResetRequiresAuthorisation(): void
+    {
+        $repo = new FakeReminderRepository([
+            $this->customer(12, '2026-03-01T00:00:00Z', new DateTimeImmutable('2026-03-15T00:00:00Z')),
+        ]);
+        $mailer = new FakeReminderMailer();
+
+        $this->expectException(ReminderAuthorizationRequired::class);
+        try {
+            (new ReminderService($repo, $mailer, new FakeReminderLogger()))
+                ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'));
+        } finally {
+            self::assertSame(0, $mailer->sendCount);
+            self::assertSame(0, $repo->clearCount);
+        }
     }
 
     public function testManualReminderDoesNotSendIfAtomicUpdateLosesRace(): void
@@ -149,11 +180,10 @@ final class ReminderServiceTest extends TestCase
         }
     }
 
-    public function testManualSmtpFailureRestoresPreviousReminderDate(): void
+    public function testManualSmtpFailureRestoresNullReminderDate(): void
     {
-        $previousSent = new DateTimeImmutable('2026-03-15T00:00:00Z');
         $repo = new FakeReminderRepository([
-            $this->customer(12, '2026-03-01T00:00:00Z', $previousSent),
+            $this->customer(12, '2026-03-01T00:00:00Z', null),
         ]);
         $mailer = new FakeReminderMailer();
         $mailer->exception = new RuntimeException('SMTP unavailable');
@@ -161,9 +191,9 @@ final class ReminderServiceTest extends TestCase
         $this->expectException(ReminderDeliveryFailed::class);
         try {
             (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-                ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'), true);
+                ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'));
         } finally {
-            self::assertSame($previousSent, $repo->restoredSentAt);
+            self::assertNull($repo->restoredSentAt);
         }
     }
 
