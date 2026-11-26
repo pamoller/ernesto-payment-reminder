@@ -87,6 +87,52 @@ describe('App', () => {
     expect(wrapper.find('[role="alert"]').text()).toBe('Invalid credentials')
   })
 
+  it('übermittelt die eingegebenen Werte beim ersten Speichern einer Subscription', async () => {
+    let submitted: Record<string, unknown> | null = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url === '/api/auth/session') {
+        return new Response(JSON.stringify({ authenticated: true, csrf_token: 'test-csrf', username: 'admin' }), { status: 200 })
+      }
+      if (url === '/api/subscription-types') {
+        return new Response(JSON.stringify({ subscription_types: [
+          { id: 1, name: 'Skool Test', duration: '3 MONTHS', duration_months: 3, reminder: 'Text' },
+        ] }), { status: 200 })
+      }
+      if (url === '/api/customers' && init?.method === 'POST') {
+        submitted = JSON.parse(String(init.body)) as Record<string, unknown>
+        const customer = {
+          ...submitted,
+          id: 7,
+          duration_months: 3,
+          expires_at: '2027-02-26',
+          reminder_sent: null,
+        }
+        return new Response(JSON.stringify({ customer }), { status: 201 })
+      }
+      if (url.startsWith('/api/customers?')) {
+        return new Response(JSON.stringify({ customers: [], pagination: { total_pages: 1 } }), { status: 200 })
+      }
+      return new Response(JSON.stringify({}), { status: 200 })
+    })
+
+    const { wrapper } = await mountApp('/subscriptions/new')
+    await flushPromises()
+    await wrapper.find('#name').setValue('Test')
+    await wrapper.find('#email').setValue('test@example.com')
+    await wrapper.find('#start_date').setValue('2026-11-26')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(submitted).toMatchObject({
+      name: 'Test',
+      email: 'test@example.com',
+      subscription_type_id: 1,
+      start_date: '2026-11-26',
+    })
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+
   it('sendet einen manuellen Reminder', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)

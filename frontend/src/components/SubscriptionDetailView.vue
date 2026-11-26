@@ -34,6 +34,10 @@ const dirty = computed(() => {
     || form.subscription_type_id !== original.value.subscription_type_id || form.start_date !== original.value.start_date
 })
 
+function updateForm(value: typeof form): void {
+  Object.assign(form, value)
+}
+
 const removeNavigationGuard = router.beforeEach((to, from) => {
   const leavingDetail = from.path === route.path
     && (from.path === '/subscriptions/new' || /^\/subscriptions\/\d+$/.test(from.path))
@@ -282,7 +286,13 @@ onBeforeUnmount(() => {
           <div><span class="block font-semibold">Erinnert am</span>{{ formatTimestamp(customer.reminder_sent) }}</div>
         </div>
 
-        <SubscriptionForm v-model="form" :subscription-types="types" :busy="busy" @submit="save">
+        <SubscriptionForm
+          :model-value="form"
+          :subscription-types="types"
+          :busy="busy"
+          @update:model-value="updateForm"
+          @submit="save"
+        >
           <template #actions>
             <div class="flex flex-wrap items-center gap-3 border-t border-ernesto-blue/20 pt-5">
               <button type="submit" :disabled="busy" class="rounded bg-ernesto-blue px-4 py-2 font-semibold text-white disabled:opacity-60">
