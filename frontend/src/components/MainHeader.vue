@@ -14,18 +14,18 @@ async function logout(): Promise<void> {
 </script>
 
 <template>
-  <header class="border-b border-emerald-900/10 bg-white">
+  <header class="border-b border-ernesto-blue-dark bg-ernesto-blue text-white">
     <div class="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-      <a href="/subscriptions" class="font-serif text-xl font-bold text-ernesto-green">
+      <a href="/subscriptions" class="font-serif text-xl font-bold text-white">
         Ernesto's Payment Reminder
       </a>
       <nav class="flex flex-wrap items-center gap-2 text-sm" aria-label="Hauptnavigation">
         <a
           href="/subscriptions"
-          class="rounded bg-ernesto-green px-3 py-2 text-white"
+          class="rounded bg-white/15 px-3 py-2 text-white"
         >Abonnements</a>
-        <a href="/subscriptions/new" class="rounded px-3 py-2 text-ernesto-green hover:bg-emerald-50">Abonnement hinzufügen</a>
-        <button type="button" class="rounded px-3 py-2 text-slate-600 hover:bg-slate-100" @click="logout">
+        <a href="/subscriptions/new" class="rounded px-3 py-2 text-white hover:bg-white/15">Abonnement hinzufügen</a>
+        <button type="button" class="rounded px-3 py-2 text-white hover:bg-white/15" @click="logout">
           Abmelden
         </button>
       </nav>

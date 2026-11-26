@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { auth } from '../auth'
-import type { Customer, SubscriptionType } from '../types'
+import { SUBSCRIPTIONS_REFRESH_EVENT, type Customer, type SubscriptionType } from '../types'
 
 const router = useRouter()
 const route = useRoute()
@@ -120,6 +120,10 @@ function changePage(next: number): void {
   void loadCustomers()
 }
 
+function refreshCustomers(): void {
+  void loadCustomers()
+}
+
 watch(() => route.query, () => {
   page.value = Number(route.query.page ?? 1)
   sort.value = String(route.query.sort ?? 'expires_at')
@@ -127,8 +131,11 @@ watch(() => route.query, () => {
 })
 
 onMounted(async () => {
+  window.addEventListener(SUBSCRIPTIONS_REFRESH_EVENT, refreshCustomers)
   await Promise.all([loadTypes(), loadCustomers()])
 })
+
+onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, refreshCustomers))
 </script>
 
 <template>
@@ -182,13 +189,11 @@ onMounted(async () => {
             </td>
             <td class="px-3 py-3" @click.stop>
               <button
-                v-if="customer.reminder_sent === null"
                 type="button"
                 :disabled="remindingId === customer.id"
                 class="rounded bg-ernesto-green px-3 py-1.5 text-white disabled:opacity-60"
                 @click="remind(customer)"
-              >{{ remindingId === customer.id ? 'Sendet …' : 'Erinnern' }}</button>
-              <span v-else class="text-slate-500">{{ formatTimestamp(customer.reminder_sent) }}</span>
+              >Erinnern</button>
             </td>
           </tr>
         </tbody>

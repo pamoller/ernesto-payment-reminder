@@ -1,3 +1,5 @@
+export const SUBSCRIPTIONS_REFRESH_EVENT = 'subscriptions:refresh'
+
 export type Customer = {
   id: number
   name: string
