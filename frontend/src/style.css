@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ernesto-green: #355d46;
+  --color-ernesto-green-dark: #274735;
+  --color-ernesto-cream: #f7f4ec;
+  --color-ernesto-gold: #c49a45;
+  --font-sans: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+@layer base {
+  body { @apply m-0 bg-ernesto-cream text-slate-800 font-sans; }
+  button, input, select { @apply font-sans; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-ernesto-gold; }
+}

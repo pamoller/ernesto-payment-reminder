@@ -34,7 +34,9 @@ php bin/run-reminders.php
 
 Der Cronjob darf den Vorgang wiederholt ausführen. Bereits versendete Erinnerungen werden über `subscriptions.reminder_sent` nicht erneut ausgelöst.
 
-In der Kundenliste kann über **Remind** unabhängig vom Ablaufdatum sofort eine E-Mail ausgelöst werden. Ein erfolgreicher manueller Versand setzt `reminder_sent` auf den neuen Versandzeitpunkt; bei SMTP-Fehler bleibt der vorherige Versandzeitpunkt erhalten.
+In der Kundenliste und in der Abonnementdetailansicht kann über **Erinnern** beziehungsweise **Erneut erinnern** unabhängig vom Ablaufdatum eine E-Mail ausgelöst werden. Wiederholte Erinnerungen müssen vom Benutzer ausdrücklich bestätigt werden. Ein erfolgreicher manueller Versand setzt `reminder_sent` auf den neuen Versandzeitpunkt; bei SMTP-Fehler bleibt der vorherige Versandzeitpunkt erhalten.
+
+Die Vue-Oberfläche verwendet Vue Router und Tailwind CSS. Geschützte Routen starten standardmäßig unter `/subscriptions`; `/subscriptions/new` erstellt ein neues Abonnement und `/subscriptions/:id` öffnet die Detailansicht.
 
 ## Authentifizierung
 

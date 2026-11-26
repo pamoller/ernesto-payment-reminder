@@ -121,7 +121,7 @@ final class ReminderServiceTest extends TestCase
         $sentAt = new DateTimeImmutable('2026-03-20T12:00:00Z');
 
         $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->sendManually(7, $sentAt);
+            ->sendManually(7, $sentAt, true);
 
         self::assertSame($sentAt->format(DATE_ATOM), $result->format(DATE_ATOM));
         self::assertSame(1, $mailer->sendCount);
@@ -161,7 +161,7 @@ final class ReminderServiceTest extends TestCase
         $this->expectException(ReminderDeliveryFailed::class);
         try {
             (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-                ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'));
+                ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'), true);
         } finally {
             self::assertSame($previousSent, $repo->restoredSentAt);
         }

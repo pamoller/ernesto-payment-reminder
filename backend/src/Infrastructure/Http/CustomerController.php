@@ -18,7 +18,16 @@ final class CustomerController
 
     public function list(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        return $this->json($response, ['customers' => $this->service->all()]);
+        $query = $request->getQueryParams();
+        $page = filter_var($query['page'] ?? 1, FILTER_VALIDATE_INT);
+        $perPage = filter_var($query['per_page'] ?? 25, FILTER_VALIDATE_INT);
+        $sort = is_string($query['sort'] ?? null) ? $query['sort'] : 'expires_at';
+        $direction = is_string($query['direction'] ?? null) ? $query['direction'] : 'asc';
+        if ($page === false || $page < 1 || $perPage === false || $perPage !== 25) {
+            return $this->json($response, ['error' => 'Ungültige Paginierungsparameter'], 422);
+        }
+        $result = $this->service->paginate((int) $page, (int) $perPage, $sort, $direction);
+        return $this->json($response, $result);
     }
 
     public function listSubscriptionTypes(

@@ -95,7 +95,11 @@ final class ReminderService
         );
     }
 
-    public function sendManually(int $customerId, DateTimeImmutable $now): DateTimeImmutable
+    public function sendManually(
+        int $customerId,
+        DateTimeImmutable $now,
+        bool $authoriseRepeatedReminder = false,
+    ): DateTimeImmutable
     {
         $customer = $this->customers->findById($customerId);
         if ($customer === null) {
@@ -106,6 +110,11 @@ final class ReminderService
         $subscriptionId = $subscription->id();
         if ($subscriptionId === null) {
             throw new \LogicException('Cannot send a reminder for an unsaved subscription');
+        }
+        if ($subscription->reminderSent() !== null && !$authoriseRepeatedReminder) {
+            throw new ReminderAuthorizationRequired(
+                'Eine erneute Erinnerung erfordert eine ausdrückliche Autorisierung',
+            );
         }
 
         $sentAt = $now->setTimezone(new DateTimeZone('UTC'));

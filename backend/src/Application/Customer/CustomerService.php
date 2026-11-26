@@ -41,6 +41,48 @@ final class CustomerService
         return array_map(fn (Customer $customer): array => $this->toArray($customer), $this->customers->all());
     }
 
+    /** @return array{customers:list<array<string,mixed>>,pagination:array<string,int|string>} */
+    public function paginate(
+        int $page = 1,
+        int $perPage = 25,
+        string $sort = 'expires_at',
+        string $direction = 'asc',
+    ): array {
+        $page = max(1, $page);
+        $perPage = $perPage === 25 ? 25 : 25;
+        $supported = ['name', 'email', 'subscription_type_id', 'start_date', 'expires_at', 'reminder_sent'];
+        if (!in_array($sort, $supported, true)) {
+            $sort = 'expires_at';
+        }
+        $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
+
+        $customers = array_map(fn (Customer $customer): array => $this->toArray($customer), $this->customers->all());
+        usort($customers, static function (array $left, array $right) use ($sort, $direction): int {
+            $leftValue = $left[$sort] ?? '';
+            $rightValue = $right[$sort] ?? '';
+            $comparison = $leftValue === null ? 1 : ($rightValue === null ? -1 : strcmp((string) $leftValue, (string) $rightValue));
+            if ($comparison === 0) {
+                $comparison = $left['id'] <=> $right['id'];
+            }
+            return $direction === 'desc' ? -$comparison : $comparison;
+        });
+
+        $total = count($customers);
+        $offset = ($page - 1) * $perPage;
+        $customers = array_slice($customers, $offset, $perPage);
+        return [
+            'customers' => $customers,
+            'pagination' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'total_pages' => max(1, (int) ceil($total / $perPage)),
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
+        ];
+    }
+
     /** @return array<string, mixed>|null */
     public function find(int $id): ?array
     {

@@ -6,6 +6,7 @@ namespace App\Infrastructure\Http;
 
 use App\Application\Reminder\ReminderClaimConflict;
 use App\Application\Reminder\ReminderDeliveryFailed;
+use App\Application\Reminder\ReminderAuthorizationRequired;
 use App\Application\Reminder\ReminderService;
 use OutOfBoundsException;
 use Psr\Http\Message\ResponseInterface;
@@ -24,9 +25,13 @@ final class ReminderController
         array $args,
     ): ResponseInterface {
         try {
+            $input = $request->getParsedBody();
+            $authoriseRepeatedReminder = is_array($input)
+                && (($input['authorise_repeated_reminder'] ?? false) === true);
             $sentAt = $this->service->sendManually(
                 (int) $args['id'],
                 new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
+                $authoriseRepeatedReminder,
             );
             return $this->json($response, [
                 'sent' => true,
@@ -35,6 +40,8 @@ final class ReminderController
         } catch (OutOfBoundsException) {
             return $this->json($response, ['error' => 'Customer not found'], 404);
         } catch (ReminderClaimConflict $exception) {
+            return $this->json($response, ['error' => $exception->getMessage()], 409);
+        } catch (ReminderAuthorizationRequired $exception) {
             return $this->json($response, ['error' => $exception->getMessage()], 409);
         } catch (ReminderDeliveryFailed $exception) {
             error_log($exception->getMessage() . ': ' . $exception->getPrevious()?->getMessage());
