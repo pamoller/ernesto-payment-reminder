@@ -34,6 +34,8 @@ php bin/run-reminders.php
 
 Der Cronjob darf den Vorgang wiederholt ausführen. `subscriptions.reminder_sent` enthält den letzten erfolgreichen Versand für den aktuellen Subscription-Status. Bei einem tatsächlichen Statuswechsel wird der Wert zurückgesetzt; ein gleichbleibender Status ändert weder Statuszeitpunkt noch Versandzeitpunkt.
 
+Automatische Erinnerungen werden höchstens bis einschließlich `starts_at + Laufzeit + MESSAGE_LATEST_SEND` Tage versendet. `MESSAGE_LATEST_SEND` ist eine nicht-negative Ganzzahl in Tagen. Verspätete automatische Nachrichten werden als `latestSendSkipped` im Ergebnis des Cronjobs ausgewiesen; manuelle Status-Mails bleiben davon unberührt.
+
 In der Abonnementdetailansicht kann der Status im Bearbeitungsformular gewählt und gespeichert werden. Jeder Speichervorgang setzt `subscription_status_changed` auf den aktuellen Zeitpunkt und `reminder_sent` auf `NULL`. Über **Erinnern** direkt neben dem Statusfeld kann die E-Mail des gespeicherten aktuellen Status erneut versendet werden. Ein fehlgeschlagener E-Mail-Versand bleibt vom erfolgreich persistierten Statuswechsel getrennt und wird separat im Ergebnis gemeldet.
 
 E-Mail-Betreff und vollständiger Nachrichtentext kommen aus `subscription_status`. Unterstützte Platzhalter sind unter anderem `{{customer_name}}`, `{{customer_email}}`, `{{duration}}`, `{{duration_months}}`, `{{start_date}}`, `{{expires_at}}`, `{{subscription_status}}` und `{{subscription_status_changed}}`. Unbekannte Platzhalter führen zu einem Versandfehler.

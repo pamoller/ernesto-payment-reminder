@@ -211,6 +211,19 @@ final class Subscription
         return Duration::fromString($this->duration)->addTo($this->startsAt);
     }
 
+    public function latestAutomaticSendAt(int $days): DateTimeImmutable
+    {
+        if ($days < 0) {
+            throw new InvalidArgumentException('Latest automatic send days cannot be negative');
+        }
+        return Duration::fromString($days . ' DAYS')->addTo($this->expiresAt());
+    }
+
+    public function canSendAutomaticMessageAt(DateTimeImmutable $now, int $days): bool
+    {
+        return $now <= $this->latestAutomaticSendAt($days);
+    }
+
     public function isReminderDue(DateTimeImmutable $now): bool
     {
         return $this->reminderSent === null && $now >= $this->expiresAt();

@@ -42,6 +42,24 @@ final class CustomerTest extends TestCase
         self::assertSame('1 DAYS', $blackFriday->duration());
     }
 
+    public function testAllowsAutomaticSendUntilLatestConfiguredDayInclusive(): void
+    {
+        $subscription = Subscription::create(1, '3 MONTHS', new DateTimeImmutable('2026-01-01T00:00:00Z'));
+
+        self::assertSame(
+            '2026-05-01T00:00:00+00:00',
+            $subscription->latestAutomaticSendAt(30)->format(DATE_ATOM),
+        );
+        self::assertTrue($subscription->canSendAutomaticMessageAt(
+            new DateTimeImmutable('2026-05-01T00:00:00Z'),
+            30,
+        ));
+        self::assertFalse($subscription->canSendAutomaticMessageAt(
+            new DateTimeImmutable('2026-05-01T00:00:01Z'),
+            30,
+        ));
+    }
+
     public function testRejectsInvalidEmail(): void
     {
         $this->expectException(InvalidArgumentException::class);

@@ -47,6 +47,51 @@ final class ReminderServiceTest extends TestCase
         self::assertSame(1, $mailer->sendCount);
     }
 
+    public function testSendsAutomaticMessageAtLatestAllowedMoment(): void
+    {
+        $repo = new FakeReminderRepository([
+            $this->customer(3, '2026-01-01T00:00:00Z', null),
+        ]);
+        $mailer = new FakeReminderMailer();
+
+        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger(), 30))
+            ->process(new DateTimeImmutable('2026-05-01T00:00:00Z'));
+
+        self::assertSame(1, $result->sent);
+        self::assertSame(0, $result->latestSendSkipped);
+        self::assertSame(1, $mailer->sendCount);
+    }
+
+    public function testSkipsAutomaticMessageAfterLatestAllowedMoment(): void
+    {
+        $repo = new FakeReminderRepository([
+            $this->customer(3, '2026-01-01T00:00:00Z', null),
+        ]);
+        $mailer = new FakeReminderMailer();
+
+        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger(), 30))
+            ->process(new DateTimeImmutable('2026-05-01T00:00:01Z'));
+
+        self::assertSame(0, $result->sent);
+        self::assertSame(1, $result->latestSendSkipped);
+        self::assertSame(0, $mailer->sendCount);
+        self::assertFalse($repo->claimCalled);
+    }
+
+    public function testManualMessageIsNotRestrictedByLatestAutomaticSendLimit(): void
+    {
+        $repo = new FakeReminderRepository([
+            $this->customer(3, '2026-01-01T00:00:00Z', null),
+        ]);
+        $mailer = new FakeReminderMailer();
+
+        $sentAt = (new ReminderService($repo, $mailer, new FakeReminderLogger(), 0))
+            ->sendManually(7, new DateTimeImmutable('2027-01-01T00:00:00Z'));
+
+        self::assertNotNull($sentAt);
+        self::assertSame(1, $mailer->sendCount);
+    }
+
     public function testDoesNotSendWhenAlreadyMarked(): void
     {
         $repo = new FakeReminderRepository([
@@ -233,6 +278,7 @@ final class FakeReminderRepository implements CustomerRepository
     public ?DateTimeImmutable $expectedPreviousSentAt = null;
     public ?DateTimeImmutable $claimedAt = null;
     public ?DateTimeImmutable $restoredSentAt = null;
+    public bool $claimCalled = false;
 
     /** @param list<Customer> $customers */
     public function __construct(private array $customers)
@@ -274,6 +320,7 @@ final class FakeReminderRepository implements CustomerRepository
 
     public function tryClaimReminder(int $subscriptionId, DateTimeImmutable $sentAt): bool
     {
+        $this->claimCalled = true;
         return $this->claimResult;
     }
 

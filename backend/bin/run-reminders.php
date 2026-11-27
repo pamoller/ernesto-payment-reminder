@@ -10,6 +10,15 @@ use App\Infrastructure\Reminder\PhpmailerReminderMailer;
 
 require __DIR__ . '/../vendor/autoload.php';
 
+PdoFactory::loadEnv();
+$latestSendValue = getenv('MESSAGE_LATEST_SEND');
+if ($latestSendValue === false
+    || filter_var($latestSendValue, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) === false
+) {
+    fwrite(STDERR, "MESSAGE_LATEST_SEND must be a non-negative integer\n");
+    exit(1);
+}
+
 $pdo = PdoFactory::create();
 $repository = new PdoCustomerRepository($pdo);
 $logger = new ErrorLogReminderLogger();
@@ -25,7 +34,7 @@ $mailer = new PhpmailerReminderMailer(
     getenv('SMTP_SECURE') ?: 'tls',
 );
 
-$service = new ReminderService($repository, $mailer, $logger);
+$service = new ReminderService($repository, $mailer, $logger, (int) $latestSendValue);
 
 try {
     $result = $service->process(new DateTimeImmutable('now', new DateTimeZone('UTC')));
@@ -34,6 +43,7 @@ try {
         'smtpFailures' => $result->smtpFailures,
         'resetFailures' => $result->resetFailures,
         'claimFailures' => $result->claimFailures,
+        'latestSendSkipped' => $result->latestSendSkipped,
     ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 
     exit(($result->smtpFailures > 0 || $result->resetFailures > 0 || $result->claimFailures > 0) ? 1 : 0);

@@ -16,6 +16,7 @@ final class ReminderService
         private readonly CustomerRepository $customers,
         private readonly ReminderMailer $mailer,
         private readonly ReminderLogger $logger,
+        private readonly ?int $messageLatestSendDays = null,
     ) {
     }
 
@@ -25,10 +26,16 @@ final class ReminderService
         $smtpFailures = 0;
         $resetFailures = 0;
         $claimFailures = 0;
+        $latestSendSkipped = 0;
 
         foreach ($this->customers->all() as $customer) {
             $subscription = $customer->subscription();
             if (!$subscription->isReminderDue($now)) {
+                continue;
+            }
+            if ($this->messageLatestSendDays !== null
+                && !$subscription->canSendAutomaticMessageAt($now, $this->messageLatestSendDays)) {
+                $latestSendSkipped++;
                 continue;
             }
 
@@ -92,6 +99,7 @@ final class ReminderService
             $smtpFailures,
             $resetFailures,
             $claimFailures,
+            $latestSendSkipped,
         );
     }
 
