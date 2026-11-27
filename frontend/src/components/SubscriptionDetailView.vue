@@ -17,7 +17,6 @@ const busy = ref(false)
 const error = ref('')
 const success = ref('')
 const changeReminderDialog = ref(false)
-const reminderDialog = ref(false)
 const renewDialog = ref(false)
 
 function close(): void {
@@ -171,15 +170,6 @@ async function deleteCustomer(): Promise<void> {
   }
 }
 
-async function sendReminder(): Promise<void> {
-  if (!id.value || busy.value) return
-  if (dirty.value) {
-    error.value = 'Bitte speichern Sie die Änderungen, bevor Sie eine Zahlungserinnerung versenden.'
-    return
-  }
-  reminderDialog.value = true
-}
-
 function renewSubscription(): void {
   if (!id.value || busy.value) return
   if (dirty.value) {
@@ -207,33 +197,6 @@ async function confirmRenewal(): Promise<void> {
     await loadCustomer()
     window.dispatchEvent(new Event(SUBSCRIPTIONS_REFRESH_EVENT))
     success.value = 'Abonnement verlängert. Startdatum und Erinnerungsstatus wurden aktualisiert.'
-  } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
-  } finally {
-    busy.value = false
-  }
-}
-
-async function confirmReminder(): Promise<void> {
-  if (!id.value) return
-  reminderDialog.value = false
-  busy.value = true
-  error.value = ''
-  success.value = ''
-  try {
-    const resetting = customer.value?.reminder_sent != null
-    const response = await fetch(`/api/customers/${id.value}/remind`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth.csrfToken },
-      body: JSON.stringify({ authorise_repeated_reminder: resetting }),
-    })
-    const body = await response.json() as { reminder_sent?: string | null; reset?: boolean; error?: string }
-    if (!response.ok) throw new Error(body.error ?? 'Erinnerungsaktion konnte nicht abgeschlossen werden')
-    await loadCustomer()
-    window.dispatchEvent(new Event(SUBSCRIPTIONS_REFRESH_EVENT))
-    success.value = body.reset
-      ? 'Erinnerungsstatus zurückgesetzt. Es wurde keine E-Mail versendet.'
-      : `Erinnerungs-E-Mail an ${customer.value?.email ?? ''} wurde versendet.`
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
   } finally {
@@ -308,9 +271,6 @@ onBeforeUnmount(() => {
                 <button type="button" :disabled="dirty || busy" class="rounded bg-ernesto-blue px-4 py-2 text-white disabled:opacity-50" @click="renewSubscription">
                   Verlängern
                 </button>
-                <button type="button" :disabled="dirty || busy" class="rounded bg-ernesto-blue px-4 py-2 text-white disabled:opacity-50" @click="sendReminder">
-                  Erinnern
-                </button>
               </div>
             </div>
           </template>
@@ -334,7 +294,8 @@ onBeforeUnmount(() => {
       <div class="w-full max-w-md rounded border-2 border-ernesto-blue bg-ernesto-blue p-6 text-white">
         <h2 id="renew-title" class="text-xl font-bold text-white">Abonnement verlängern?</h2>
         <p class="mt-3">
-          Die Laufzeit von {{ customer?.duration_months }} Monaten beginnt heute neu. Der Erinnerungsstatus wird zurückgesetzt.
+          Die Laufzeit von {{ customer?.duration_months }} Monaten beginnt am bisherigen Ablaufdatum
+          {{ customer ? formatDate(customer.expires_at) : '' }} neu. Der Erinnerungsstatus wird zurückgesetzt.
         </p>
         <div class="mt-5 flex flex-row flex-wrap justify-start gap-2">
           <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="confirmRenewal">Verlängern</button>
@@ -343,22 +304,5 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="reminderDialog" class="fixed inset-0 z-40 grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="reminder-title">
-      <div class="w-full max-w-md rounded border-2 border-ernesto-blue bg-ernesto-blue p-6 text-white">
-        <h2 id="reminder-title" class="text-xl font-bold text-white">Erinnerung bestätigen</h2>
-        <p class="mt-3">
-          {{ customer?.reminder_sent
-            ? 'Soll der Erinnerungsstatus zurückgesetzt werden? Dabei wird keine E-Mail versendet.'
-            : 'Soll eine Zahlungserinnerung an diese E-Mail-Adresse versendet werden?' }}
-        </p>
-        <p class="mt-2 font-semibold">{{ customer?.email }}</p>
-        <div class="mt-5 flex flex-row flex-wrap justify-start gap-2">
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="confirmReminder">
-            {{ customer?.reminder_sent ? 'Status zurücksetzen' : 'Erinnern' }}
-          </button>
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="reminderDialog = false">Abbrechen</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>

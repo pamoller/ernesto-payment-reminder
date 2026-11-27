@@ -150,8 +150,8 @@ describe('App', () => {
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 
-  it('sendet einen manuellen Reminder', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+  it('zeigt in der Liste keinen Knopf Erinnern', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
       if (url === '/api/auth/session') {
         return new Response(JSON.stringify({ authenticated: true, csrf_token: 'test-csrf', username: 'admin' }), { status: 200 })
@@ -160,10 +160,6 @@ describe('App', () => {
         return new Response(JSON.stringify({ subscription_types: [
           { id: 1, name: 'Skool Test', duration: '3 MONTHS', duration_months: 3, reminder: 'Text' },
         ] }), { status: 200 })
-      }
-      if (url === '/api/customers/1/remind') {
-        expect(init?.method).toBe('POST')
-        return new Response(JSON.stringify({ sent: true, reminder_sent: '2026-03-20T12:00:00.123456+00:00' }), { status: 200 })
       }
       if (url.startsWith('/api/customers?')) {
         return new Response(JSON.stringify({
@@ -177,55 +173,7 @@ describe('App', () => {
     const { wrapper } = await mountApp()
     await flushPromises()
     const button = wrapper.findAll('button').find((item) => item.text() === 'Erinnern')
-    expect(button).toBeDefined()
-    await button?.trigger('click')
-    await flushPromises()
-    const confirmButton = wrapper.findAll('[role="dialog"] button').find((item) => item.text() === 'Erinnern')
-    expect(confirmButton).toBeDefined()
-    await confirmButton?.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('Erinnerungs-E-Mail an ada@example.com wurde versendet.')
-  })
-
-  it('zeigt auch bei bereits erinnerten Abonnements den Knopf Erinnern', async () => {
-    let reminderSent: string | null = '2026-03-10T09:00:00+00:00'
-    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      const url = String(input)
-      if (url === '/api/auth/session') {
-        return new Response(JSON.stringify({ authenticated: true, csrf_token: 'test-csrf', username: 'admin' }), { status: 200 })
-      }
-      if (url === '/api/subscription-types') {
-        return new Response(JSON.stringify({ subscription_types: [
-          { id: 1, name: 'Skool Test', duration: '3 MONTHS', duration_months: 3, reminder: 'Text' },
-        ] }), { status: 200 })
-      }
-      if (url === '/api/customers/1/remind') {
-        expect(JSON.parse(String(init?.body))).toEqual({ authorise_repeated_reminder: true })
-        reminderSent = null
-        return new Response(JSON.stringify({ sent: false, reset: true, reminder_sent: null }), { status: 200 })
-      }
-      if (url.startsWith('/api/customers?')) {
-        return new Response(JSON.stringify({
-          customers: [{ id: 1, name: 'Ada Lovelace', email: 'ada@example.com', subscription_type_id: 1, duration_months: 3, start_date: '2026-03-01', expires_at: '2026-06-01', reminder_sent: reminderSent }],
-          pagination: { total_pages: 1 },
-        }), { status: 200 })
-      }
-      return new Response(JSON.stringify({}), { status: 200 })
-    })
-
-    const { wrapper } = await mountApp()
-    await flushPromises()
-    const button = wrapper.findAll('button').find((item) => item.text() === 'Erinnern')
-    expect(button).toBeDefined()
-    await button?.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('Dabei wird keine E-Mail versendet.')
-    const resetButton = wrapper.findAll('[role="dialog"] button').find((item) => item.text() === 'Status zurücksetzen')
-    expect(resetButton).toBeDefined()
-    await resetButton?.trigger('click')
-    await flushPromises()
-    expect(fetch).toHaveBeenCalledWith('/api/customers/1/remind', expect.any(Object))
-    expect(wrapper.text()).toContain('Erinnerungsstatus zurückgesetzt. Es wurde keine E-Mail versendet.')
+    expect(button).toBeUndefined()
   })
 
   it('bestätigt die Verlängerung in der Liste und lädt die Liste erneut', async () => {
@@ -253,9 +201,9 @@ describe('App', () => {
       }
       if (url === '/api/customers/1/renew') {
         expect(init?.method).toBe('POST')
-        startDate = '2026-11-26'
+        startDate = '2026-06-01'
         customer.start_date = startDate
-        customer.expires_at = '2027-02-26'
+        customer.expires_at = '2026-09-01'
         customer.reminder_sent = null
         return new Response(JSON.stringify({ customer }), { status: 200 })
       }
@@ -282,7 +230,7 @@ describe('App', () => {
     expect(wrapper.text()).toContain('Abonnement von Ada Lovelace wurde verlängert.')
   })
 
-  it('lädt die Detailansicht nach Verlängern und Erinnern erneut', async () => {
+  it('lädt die Detailansicht nach Verlängern erneut und zeigt keinen Erinnern-Knopf', async () => {
     let startDate = '2026-03-01'
     let reminderSent: string | null = null
     let detailLoads = 0
@@ -293,7 +241,7 @@ describe('App', () => {
       subscription_type_id: 1,
       duration_months: 3,
       start_date: startDate,
-      expires_at: startDate === '2026-11-26' ? '2027-02-26' : '2026-06-01',
+      expires_at: startDate === '2026-06-01' ? '2026-09-01' : '2026-06-01',
       reminder_sent: reminderSent,
     })
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -307,13 +255,9 @@ describe('App', () => {
         ] }), { status: 200 })
       }
       if (url === '/api/customers/1/renew') {
-        startDate = '2026-11-26'
+        startDate = '2026-06-01'
         reminderSent = null
         return new Response(JSON.stringify({ customer: makeCustomer() }), { status: 200 })
-      }
-      if (url === '/api/customers/1/remind') {
-        reminderSent = '2026-11-26T12:00:00.000000+00:00'
-        return new Response(JSON.stringify({ sent: true, reminder_sent: reminderSent }), { status: 200 })
       }
       if (url === '/api/customers/1') {
         detailLoads++
@@ -333,13 +277,9 @@ describe('App', () => {
     await wrapper.find('[aria-labelledby="renew-title"] button').trigger('click')
     await flushPromises()
     expect(detailLoads).toBe(2)
-    expect(detail.text()).toContain('26.02.2027')
+    expect(detail.text()).toContain('01.09.2026')
 
-    await detail.findAll('button').find((item) => item.text() === 'Erinnern')?.trigger('click')
-    await wrapper.find('[aria-labelledby="reminder-title"] button').trigger('click')
-    await flushPromises()
-    expect(detailLoads).toBe(3)
-    expect(detail.text()).toContain('Erinnerungs-E-Mail an ada@example.com wurde versendet.')
+    expect(detail.findAll('button').find((item) => item.text() === 'Erinnern')).toBeUndefined()
   })
 
   it('lädt die Abonnementliste nach dem Speichern in der Detailansicht erneut', async () => {

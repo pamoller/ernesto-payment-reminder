@@ -173,7 +173,7 @@ final class CustomerService
     }
 
     /** @return array<string, mixed>|null */
-    public function renew(int $id, DateTimeImmutable $startsAt): ?array
+    public function renew(int $id): ?array
     {
         $customer = $this->customers->findById($id);
         if ($customer === null) {
@@ -185,7 +185,7 @@ final class CustomerService
             (int) $existing->id(),
             $existing->subscriptionTypeId(),
             $existing->durationMonths(),
-            $startsAt,
+            $existing->expiresAt(),
             null,
             $existing->status(),
             $existing->statusChangedAt(),

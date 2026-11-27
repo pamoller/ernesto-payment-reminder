@@ -5,7 +5,7 @@ import { auth } from '../auth'
 import { SUBSCRIPTIONS_REFRESH_EVENT, type Customer, type SubscriptionStatus, type SubscriptionType } from '../types'
 
 type PendingAction = {
-  type: 'remind' | 'renew'
+  type: 'renew'
   customer: Customer
 }
 
@@ -83,29 +83,14 @@ async function confirmAction(): Promise<void> {
   success.value = ''
   error.value = ''
   try {
-    if (action.type === 'renew') {
-      const response = await fetch(`/api/customers/${action.customer.id}/renew`, {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': auth.csrfToken },
-      })
-      const body = await response.json() as { customer?: Customer; error?: string }
-      if (!response.ok) throw new Error(body.error ?? 'Abonnement konnte nicht verlängert werden')
-      await loadCustomers()
-      success.value = `Abonnement von ${action.customer.name} wurde verlängert.`
-    } else {
-      const authorised = action.customer.reminder_sent !== null
-      const response = await fetch(`/api/customers/${action.customer.id}/remind`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth.csrfToken },
-        body: JSON.stringify({ authorise_repeated_reminder: authorised }),
-      })
-      const body = await response.json() as { reminder_sent?: string | null; reset?: boolean; error?: string }
-      if (!response.ok) throw new Error(body.error ?? 'Erinnerungsaktion konnte nicht abgeschlossen werden')
-      await loadCustomers()
-      success.value = body.reset
-        ? 'Erinnerungsstatus zurückgesetzt. Es wurde keine E-Mail versendet.'
-        : `Erinnerungs-E-Mail an ${action.customer.email} wurde versendet.`
-    }
+    const response = await fetch(`/api/customers/${action.customer.id}/renew`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': auth.csrfToken },
+    })
+    const body = await response.json() as { customer?: Customer; error?: string }
+    if (!response.ok) throw new Error(body.error ?? 'Abonnement konnte nicht verlängert werden')
+    await loadCustomers()
+    success.value = `Abonnement von ${action.customer.name} wurde verlängert.`
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
   } finally {
@@ -248,12 +233,6 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
                 type="button"
                 :disabled="processingId === customer.id"
                 class="rounded bg-ernesto-blue px-3 py-1.5 text-white disabled:opacity-60"
-                @click="requestAction('remind', customer)"
-              >Erinnern</button>
-              <button
-                type="button"
-                :disabled="processingId === customer.id"
-                class="ml-2 rounded bg-ernesto-blue px-3 py-1.5 text-white disabled:opacity-60"
                 @click="requestAction('renew', customer)"
               >Verlängern</button>
             </td>
@@ -279,23 +258,16 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
     >
       <section class="w-full max-w-md rounded border-2 border-ernesto-blue bg-ernesto-blue p-6 text-white">
         <h2 id="subscription-action-title" class="text-xl font-bold">
-          {{ pendingAction.type === 'renew' ? 'Abonnement verlängern?' : 'Erinnerung bestätigen' }}
+          Abonnement verlängern?
         </h2>
-        <p v-if="pendingAction.type === 'renew'" class="mt-3">
-          {{ pendingAction.customer.name }} wird ab heute um {{ pendingAction.customer.duration_months }} Monate verlängert.
+        <p class="mt-3">
+          {{ pendingAction.customer.name }} wird ab dem bisherigen Ablaufdatum
+          {{ formatDate(pendingAction.customer.expires_at) }} um {{ pendingAction.customer.duration_months }} Monate verlängert.
           Der Erinnerungsstatus wird zurückgesetzt.
-        </p>
-        <p v-else-if="pendingAction.customer.reminder_sent" class="mt-3">
-          Soll der Erinnerungsstatus für {{ pendingAction.customer.email }} zurückgesetzt werden? Dabei wird keine E-Mail versendet.
-        </p>
-        <p v-else class="mt-3">
-          Soll eine Zahlungserinnerung an {{ pendingAction.customer.email }} versendet werden?
         </p>
         <div class="mt-5 flex flex-row flex-wrap justify-start gap-2">
           <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="confirmAction">
-            {{ pendingAction.type === 'renew'
-              ? 'Verlängern'
-              : pendingAction.customer.reminder_sent ? 'Status zurücksetzen' : 'Erinnern' }}
+            Verlängern
           </button>
           <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="pendingAction = null">
             Abbrechen

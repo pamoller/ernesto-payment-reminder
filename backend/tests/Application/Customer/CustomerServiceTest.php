@@ -99,12 +99,12 @@ final class CustomerServiceTest extends TestCase
             $customers,
             $this->createMock(SubscriptionTypeRepository::class),
             $this->statusRepository(),
-        ))->renew(7, new DateTimeImmutable('2026-06-26T00:00:00Z'));
+        ))->renew(7);
 
         self::assertNotNull($result);
-        self::assertSame('2026-06-26', $result['start_date']);
+        self::assertSame('2026-07-15', $result['start_date']);
         self::assertSame(6, $result['duration_months']);
-        self::assertSame('2026-12-26', $result['expires_at']);
+        self::assertSame('2027-01-15', $result['expires_at']);
         self::assertNull($result['reminder_sent']);
         self::assertSame(1, $result['subscription_status_id']);
     }
