@@ -240,15 +240,6 @@ onBeforeUnmount(() => {
               </button>
               <button type="button" class="rounded bg-ernesto-blue px-4 py-2 text-white" @click="close">Abbrechen</button>
               <button v-if="id" type="button" :disabled="busy" class="rounded border border-red-200 px-4 py-2 text-red-700" @click="deleteCustomer">Löschen</button>
-              <div v-if="id" class="ml-auto flex gap-2">
-                <button
-                  v-if="customer && [2, 3].includes(customer.subscription_status_id)"
-                  type="button"
-                  :disabled="dirty || busy"
-                  class="rounded bg-emerald-700 px-4 py-2 text-white disabled:opacity-50"
-                  @click="runLifecycleAction('payment')"
-                >Zahlung registrieren</button>
-              </div>
             </div>
           </template>
         </SubscriptionForm>
