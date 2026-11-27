@@ -89,7 +89,10 @@ final class CustomerController
         array $args,
     ): ResponseInterface {
         try {
-            $customer = $this->service->renew((int) $args['id']);
+            $customer = $this->service->renew(
+                (int) $args['id'],
+                new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
+            );
             return $customer === null
                 ? $this->json($response, ['error' => 'Customer not found'], 404)
                 : $this->json($response, ['customer' => $customer]);

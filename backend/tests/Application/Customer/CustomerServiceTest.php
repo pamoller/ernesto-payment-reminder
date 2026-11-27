@@ -79,34 +79,73 @@ final class CustomerServiceTest extends TestCase
         ]);
     }
 
-    public function testRenewalKeepsDurationAndClearsReminderTimestamp(): void
+    public function testUpdateSetsSelectedStatusAndResetsDeliveryTimestamp(): void
     {
         $subscription = Subscription::reconstitute(
             12,
             42,
-            6,
+            '6 MONTHS',
             new DateTimeImmutable('2026-01-15T00:00:00Z'),
             new DateTimeImmutable('2026-03-20T09:00:00Z'),
+            new SubscriptionStatus(2, 'Fällig', '0 DAYS', 'Betreff', 'Text'),
+            new DateTimeImmutable('2026-01-15T00:00:00Z'),
         );
         $customer = Customer::reconstitute(7, 'Ada Lovelace', 'ada@example.com', $subscription);
         $customers = $this->createMock(CustomerRepository::class);
-        $customers->expects(self::once())->method('findById')->with(7)->willReturn($customer);
-        $customers->expects(self::once())->method('save')->willReturnCallback(
-            static fn (Customer $saved): Customer => $saved,
+        $customers->method('findById')->willReturn($customer);
+        $customers->method('save')->willReturnCallback(static fn (Customer $saved): Customer => $saved);
+        $type = new SubscriptionType(42, 'Skool Halbjahres Abo', '6 MONTHS', 'Text');
+        $types = $this->createMock(SubscriptionTypeRepository::class);
+        $types->method('findById')->willReturn($type);
+        $before = new DateTimeImmutable('now', new \DateTimeZone('UTC'));
+
+        $result = (new CustomerService($customers, $types, $this->statusRepository()))->update(7, [
+            'name' => 'Ada Lovelace',
+            'email' => 'ada@example.com',
+            'subscription_type_id' => 42,
+            'subscription_status_id' => 3,
+            'start_date' => '2026-01-15',
+        ]);
+
+        self::assertSame(3, $result['subscription_status_id']);
+        self::assertNull($result['reminder_sent']);
+        self::assertGreaterThanOrEqual(
+            $before->format('U'),
+            (new DateTimeImmutable($result['subscription_status_changed']))->format('U'),
         );
+    }
+
+    public function testRenewStartsNowAndResetsStatusDelivery(): void
+    {
+        $subscription = Subscription::reconstitute(
+            12,
+            42,
+            '6 MONTHS',
+            new DateTimeImmutable('2026-01-15T00:00:00Z'),
+            new DateTimeImmutable('2026-03-20T09:00:00Z'),
+            new SubscriptionStatus(3, 'Säumig', '7 DAYS', 'Mahnung', 'Text'),
+            new DateTimeImmutable('2026-03-01T00:00:00Z'),
+        );
+        $customer = Customer::reconstitute(7, 'Ada Lovelace', 'ada@example.com', $subscription);
+        $customers = $this->createMock(CustomerRepository::class);
+        $customers->method('findById')->willReturn($customer);
+        $customers->method('save')->willReturnCallback(static fn (Customer $saved): Customer => $saved);
+        $now = new DateTimeImmutable('2026-06-20T14:25:30Z');
 
         $result = (new CustomerService(
             $customers,
             $this->createMock(SubscriptionTypeRepository::class),
             $this->statusRepository(),
-        ))->renew(7);
+        ))->renew(7, $now);
 
-        self::assertNotNull($result);
-        self::assertSame('2026-07-15', $result['start_date']);
-        self::assertSame(6, $result['duration_months']);
-        self::assertSame('2027-01-15', $result['expires_at']);
-        self::assertNull($result['reminder_sent']);
+        self::assertSame('2026-06-20', $result['start_date']);
+        self::assertSame('2026-12-20', $result['expires_at']);
         self::assertSame(1, $result['subscription_status_id']);
+        self::assertSame(
+            '2026-06-20T14:25:30.000000+00:00',
+            $result['subscription_status_changed'],
+        );
+        self::assertNull($result['reminder_sent']);
     }
 
     private function statusRepository(): SubscriptionStatusRepository

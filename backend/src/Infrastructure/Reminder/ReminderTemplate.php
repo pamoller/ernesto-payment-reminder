@@ -4,10 +4,61 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Reminder;
 
+use App\Domain\Customer\Customer;
 use InvalidArgumentException;
 
 final class ReminderTemplate
 {
+    /**
+     * @return array{subject:string,body:string}|null
+     */
+    public static function forStatus(Customer $customer): ?array
+    {
+        $status = $customer->subscription()->status();
+        $subject = $status->subject();
+        $message = $status->message();
+        if ($subject === null && $message === null) {
+            return null;
+        }
+        if ($subject === null || $message === null) {
+            throw new InvalidArgumentException('Subscription status subject and message must both be configured or null');
+        }
+
+        return [
+            'subject' => self::render($subject, $customer),
+            'body' => self::render($message, $customer),
+        ];
+    }
+
+    public static function render(string $template, Customer $customer): string
+    {
+        $subscription = $customer->subscription();
+        $values = [
+            'customer_name' => $customer->name(),
+            'customer_email' => $customer->email(),
+            'subscription_type_id' => (string) $subscription->subscriptionTypeId(),
+            'duration' => $subscription->duration(),
+            'duration_months' => $subscription->durationMonths() === null
+                ? ''
+                : (string) $subscription->durationMonths(),
+            'start_date' => $subscription->startsAt()->format('d.m.Y'),
+            'expires_at' => $subscription->expiresAt()->format('d.m.Y'),
+            'subscription_status' => $subscription->status()->name(),
+            'subscription_status_changed' => $subscription->statusChangedAt()->format('d.m.Y H:i'),
+        ];
+
+        return (string) preg_replace_callback(
+            '/{{\s*([a-zA-Z0-9_]+)\s*}}/',
+            static function (array $matches) use ($values): string {
+                if (!array_key_exists($matches[1], $values)) {
+                    throw new InvalidArgumentException('Unknown subscription template placeholder: ' . $matches[1]);
+                }
+                return $values[$matches[1]];
+            },
+            $template,
+        );
+    }
+
     /** @return array{subject:string,body:string} */
     public static function forDuration(int|string $duration, string $customerName): array
     {

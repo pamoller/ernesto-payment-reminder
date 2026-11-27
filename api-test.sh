@@ -60,6 +60,7 @@ subscription_type_3_id="$(php -r '$body=json_decode(file_get_contents("/tmp/erne
 subscription_type_12_id="$(php -r '$body=json_decode(file_get_contents("/tmp/ernesto-subscription-types.json"), true, 512, JSON_THROW_ON_ERROR); foreach ($body["subscription_types"] as $type) { if ($type["duration_months"] === 12) { echo $type["id"]; exit; } } exit(1);')"
 test -n "$subscription_type_3_id"
 test -n "$subscription_type_12_id"
+php -r '$body=json_decode(file_get_contents("/tmp/ernesto-subscription-types.json"), true, 512, JSON_THROW_ON_ERROR); $expected=["Skool Black Friday"=>"1 DAYS","Skool Instant"=>"0 DAYS"]; foreach($expected as $name=>$duration){$found=false; foreach($body["subscription_types"] as $type){if(($type["name"]??null)===$name && ($type["duration"]??null)===$duration){$found=true;break;}} if(!$found) exit(1);}'
 
 subscription_statuses_status="$(curl -sS -o /tmp/ernesto-subscription-statuses.json -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt "$base_url/api/subscription-statuses")"
@@ -91,9 +92,10 @@ update_status="$(curl -sS -o /tmp/ernesto-customer-updated.json -w '%{http_code}
   -X PUT \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: $csrf_token" \
-  -d "{\"name\":\"API Test Updated\",\"email\":\"api-test@example.invalid\",\"subscription_type_id\":$subscription_type_12_id,\"start_date\":\"2026-02-01\"}" \
+  -d "{\"name\":\"API Test Updated\",\"email\":\"api-test@example.invalid\",\"subscription_type_id\":$subscription_type_12_id,\"subscription_status_id\":1,\"start_date\":\"2026-02-01\"}" \
   "$base_url/api/customers/$customer_id")"
 require_status customer-update 200 "$update_status"
+php -r '$body=json_decode(file_get_contents("/tmp/ernesto-customer-updated.json"), true, 512, JSON_THROW_ON_ERROR); exit(($body["customer"]["subscription_status_id"] ?? null) === 1 && ($body["customer"]["reminder_sent"] ?? "not-null") === null ? 0 : 1);'
 
 delete_status="$(curl -sS -o /dev/null -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt \

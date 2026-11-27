@@ -177,4 +177,37 @@ final class PdoCustomerRepositoryTest extends TestCase
             $restored?->subscription()->reminderSent()?->format(DATE_ATOM),
         );
     }
+
+    public function testStateUpdateIsConditionalAndClearsReminderTimestamp(): void
+    {
+        $customer = Customer::create(
+            'Ada Lovelace',
+            'ada@example.com',
+            Subscription::create(1, '3 MONTHS', new DateTimeImmutable('2026-01-01T00:00:00Z')),
+        );
+        $saved = $this->repository->save($customer);
+        $subscription = $saved->subscription();
+        $expectedStatus = $subscription->status()->id();
+        $expectedChanged = $subscription->statusChangedAt();
+        $due = new \App\Domain\Customer\SubscriptionStatus(2, 'Fällig', '0 DAYS', 'Fällig', 'Text');
+
+        self::assertTrue($subscription->transitionTo(
+            $due,
+            new DateTimeImmutable('2026-04-01T00:00:00Z'),
+        ));
+        self::assertTrue($this->repository->trySaveSubscriptionState(
+            $subscription,
+            $expectedStatus,
+            $expectedChanged,
+        ));
+        self::assertFalse($this->repository->trySaveSubscriptionState(
+            $subscription,
+            $expectedStatus,
+            $expectedChanged,
+        ));
+
+        $reloaded = $this->repository->findById((int) $saved->id());
+        self::assertSame(2, $reloaded?->subscription()->status()->id());
+        self::assertNull($reloaded?->subscription()->reminderSent());
+    }
 }

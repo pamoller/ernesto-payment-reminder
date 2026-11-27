@@ -180,3 +180,31 @@ paths:
           description: Invalid CSRF token
         '502':
           description: SMTP delivery failed
+  /api/customers/{id}/payment:
+    post:
+      summary: Register a payment and return a due or overdue subscription to paid
+      responses:
+        '200':
+          description: Subscription state persisted; includes email delivery result
+        '409':
+          description: Subscription state changed concurrently
+        '422':
+          description: Payment transition is not valid for the current state
+  /api/customers/{id}/reactivate:
+    post:
+      summary: Reactivate an ended subscription
+      responses:
+        '200':
+          description: Subscription reactivated
+        '409':
+          description: Subscription state changed concurrently
+        '422':
+          description: Current state cannot be reactivated
+  /api/customers/{id}/status-email:
+    post:
+      summary: Resend the email for the current subscription status
+      responses:
+        '200':
+          description: Delivery result; state and dates remain unchanged
+        '409':
+          description: Delivery state changed concurrently

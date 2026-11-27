@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { auth } from '../auth'
 import { SUBSCRIPTIONS_REFRESH_EVENT, type Customer, type SubscriptionStatus, type SubscriptionType } from '../types'
+import { auth } from '../auth'
 
 type PendingAction = {
-  type: 'renew'
   customer: Customer
 }
 
@@ -70,27 +69,21 @@ function setSort(field: string): void {
   void loadCustomers()
 }
 
-function requestAction(type: PendingAction['type'], customer: Customer): void {
-  pendingAction.value = { type, customer }
-}
-
-async function confirmAction(): Promise<void> {
-  const action = pendingAction.value
-  if (!action || processingId.value !== null) return
-
+async function renew(customer: Customer): Promise<void> {
+  if (processingId.value !== null) return
   pendingAction.value = null
-  processingId.value = action.customer.id
-  success.value = ''
+  processingId.value = customer.id
   error.value = ''
+  success.value = ''
   try {
-    const response = await fetch(`/api/customers/${action.customer.id}/renew`, {
+    const response = await fetch(`/api/customers/${customer.id}/renew`, {
       method: 'POST',
       headers: { 'X-CSRF-Token': auth.csrfToken },
     })
-    const body = await response.json() as { customer?: Customer; error?: string }
+    const body = await response.json() as { error?: string }
     if (!response.ok) throw new Error(body.error ?? 'Abonnement konnte nicht verlängert werden')
     await loadCustomers()
-    success.value = `Abonnement von ${action.customer.name} wurde verlängert.`
+    success.value = `Abonnement von ${customer.name} wurde verlängert.`
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
   } finally {
@@ -114,20 +107,6 @@ function state(customer: Customer): 'expired' | 'soon' | 'active' {
 
 function typeName(id: number): string {
   return types.value.find((type) => type.id === id)?.name ?? ''
-}
-
-function durationLabel(customer: Customer): string {
-  const duration = customer.duration
-    ?? types.value.find((type) => type.id === customer.subscription_type_id)?.duration
-    ?? `${customer.duration_months ?? ''} months`
-  const match = /^(\d+) (DAY|DAYS|WEEK|WEEKS|MONTH|MONTHS|YEAR|YEARS)$/i.exec(duration)
-  if (!match) return duration
-  const amount = Number(match[1])
-  const unit = match[2].toUpperCase()
-  if (unit.startsWith('DAY')) return `${amount} ${amount === 1 ? 'Tag' : 'Tage'}`
-  if (unit.startsWith('WEEK')) return `${amount} ${amount === 1 ? 'Woche' : 'Wochen'}`
-  if (unit.startsWith('MONTH')) return `${amount} ${amount === 1 ? 'Monat' : 'Monate'}`
-  return `${amount} ${amount === 1 ? 'Jahr' : 'Jahre'}`
 }
 
 function formatDate(value: string): string {
@@ -191,7 +170,6 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
     </header>
     <p v-if="error" role="alert" class="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700">{{ error }}</p>
     <p v-if="success" role="status" class="mb-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">{{ success }}</p>
-
     <div v-if="loading" class="py-10 text-center text-slate-500">Abonnements werden geladen …</div>
     <div v-else-if="customers.length === 0" class="rounded border border-slate-200 bg-white px-4 py-10 text-center text-slate-500">
       Keine Abonnements vorhanden.
@@ -248,7 +226,7 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
                 type="button"
                 :disabled="processingId === customer.id"
                 class="rounded bg-ernesto-blue px-3 py-1.5 text-white disabled:opacity-60"
-                @click="requestAction('renew', customer)"
+                @click="pendingAction = { customer }"
               >Verlängern</button>
             </td>
           </tr>
@@ -267,26 +245,19 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
       class="fixed inset-0 z-30 grid place-items-center bg-slate-950/60 p-4"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="subscription-action-title"
+      aria-labelledby="renew-list-title"
       @click.self="pendingAction = null"
       @keydown.esc="pendingAction = null"
     >
-      <section class="w-full max-w-md rounded border-2 border-ernesto-blue bg-ernesto-blue p-6 text-white">
-        <h2 id="subscription-action-title" class="text-xl font-bold">
-          Abonnement verlängern?
-        </h2>
+      <section class="w-full max-w-md rounded border-2 border-ernesto-blue bg-white p-6 text-slate-800">
+        <h2 id="renew-list-title" class="text-xl font-bold">Abonnement verlängern?</h2>
         <p class="mt-3">
-          {{ pendingAction.customer.name }} wird ab dem bisherigen Ablaufdatum
-          {{ formatDate(pendingAction.customer.expires_at) }} um {{ durationLabel(pendingAction.customer) }} verlängert.
-          Der Erinnerungsstatus wird zurückgesetzt.
+          Das Abo von {{ pendingAction.customer.name }} beginnt jetzt neu.
+          Status, Statuszeitpunkt und Erinnerung werden zurückgesetzt.
         </p>
-        <div class="mt-5 flex flex-row flex-wrap justify-start gap-2">
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="confirmAction">
-            Verlängern
-          </button>
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="pendingAction = null">
-            Abbrechen
-          </button>
+        <div class="mt-5 flex gap-2">
+          <button type="button" class="rounded bg-ernesto-blue px-3 py-2 text-white" @click="renew(pendingAction.customer)">Verlängern</button>
+          <button type="button" class="rounded border px-3 py-2" @click="pendingAction = null">Abbrechen</button>
         </div>
       </section>
     </div>

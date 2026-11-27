@@ -264,6 +264,14 @@ final class FakeReminderRepository implements CustomerRepository
         return false;
     }
 
+    public function trySaveSubscriptionState(
+        Subscription $subscription,
+        int $expectedStatusId,
+        DateTimeImmutable $expectedStatusChangedAt,
+    ): bool {
+        return true;
+    }
+
     public function tryClaimReminder(int $subscriptionId, DateTimeImmutable $sentAt): bool
     {
         return $this->claimResult;
@@ -279,6 +287,7 @@ final class FakeReminderRepository implements CustomerRepository
         int $subscriptionId,
         ?DateTimeImmutable $expectedSentAt,
         DateTimeImmutable $sentAt,
+        ?int $expectedStatusId = null,
     ): bool {
         $this->expectedPreviousSentAt = $expectedSentAt;
         $this->claimedAt = $sentAt;
@@ -289,6 +298,7 @@ final class FakeReminderRepository implements CustomerRepository
         int $subscriptionId,
         DateTimeImmutable $claimedAt,
         ?DateTimeImmutable $previousSentAt,
+        ?int $expectedStatusId = null,
     ): bool {
         $this->restoredSentAt = $previousSentAt;
         return $this->clearResult;

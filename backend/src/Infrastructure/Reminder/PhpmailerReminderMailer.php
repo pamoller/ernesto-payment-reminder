@@ -24,10 +24,10 @@ final class PhpmailerReminderMailer implements ReminderMailer
 
     public function send(Customer $customer): void
     {
-        $template = ReminderTemplate::forDuration(
-            $customer->subscription()->duration(),
-            $customer->name(),
-        );
+        $template = ReminderTemplate::forStatus($customer);
+        if ($template === null) {
+            return;
+        }
 
         $mail = new PHPMailer(true);
         $mail->isSMTP();

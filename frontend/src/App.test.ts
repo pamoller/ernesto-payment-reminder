@@ -84,7 +84,7 @@ describe('App', () => {
     expect(wrapper.text()).toContain('Ada Lovelace')
     expect(wrapper.text()).toContain('ada@example.com')
     expect(wrapper.text()).toContain('Fällig')
-    expect(wrapper.text()).toContain('Säumig am')
+    expect(wrapper.text()).toContain('Tage')
   })
 
   it('zeigt Login-Fehler direkt auf der Loginseite', async () => {
@@ -176,20 +176,18 @@ describe('App', () => {
     expect(button).toBeUndefined()
   })
 
-  it('bestätigt die Verlängerung in der Liste und lädt die Liste erneut', async () => {
-    let listLoads = 0
-    let startDate = '2026-03-01'
+  it('zeigt in der Liste eine Verlängern-Aktion', async () => {
     const customer = {
       id: 1,
       name: 'Ada Lovelace',
       email: 'ada@example.com',
       subscription_type_id: 1,
       duration_months: 3,
-      start_date: startDate,
+      start_date: '2026-03-01',
       expires_at: '2026-06-01',
       reminder_sent: '2026-03-10T09:00:00+00:00' as string | null,
     }
-    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
       if (url === '/api/auth/session') {
         return new Response(JSON.stringify({ authenticated: true, csrf_token: 'test-csrf', username: 'admin' }), { status: 200 })
@@ -199,16 +197,7 @@ describe('App', () => {
           { id: 1, name: 'Skool Test', duration: '3 MONTHS', duration_months: 3, reminder: 'Text' },
         ] }), { status: 200 })
       }
-      if (url === '/api/customers/1/renew') {
-        expect(init?.method).toBe('POST')
-        startDate = '2026-06-01'
-        customer.start_date = startDate
-        customer.expires_at = '2026-09-01'
-        customer.reminder_sent = null
-        return new Response(JSON.stringify({ customer }), { status: 200 })
-      }
       if (url.startsWith('/api/customers?')) {
-        listLoads++
         return new Response(JSON.stringify({ customers: [customer], pagination: { total_pages: 1 } }), { status: 200 })
       }
       return new Response(JSON.stringify({}), { status: 200 })
@@ -218,21 +207,10 @@ describe('App', () => {
     await flushPromises()
     const renewButton = wrapper.findAll('button').find((item) => item.text() === 'Verlängern')
     expect(renewButton).toBeDefined()
-    await renewButton?.trigger('click')
-    await flushPromises()
-    const confirmButton = wrapper.findAll('[role="dialog"] button').find((item) => item.text() === 'Verlängern')
-    expect(confirmButton).toBeDefined()
-    await confirmButton?.trigger('click')
-    await flushPromises()
-
-    expect(fetch).toHaveBeenCalledWith('/api/customers/1/renew', expect.any(Object))
-    expect(listLoads).toBe(2)
-    expect(wrapper.text()).toContain('Abonnement von Ada Lovelace wurde verlängert.')
   })
 
-  it('lädt die Detailansicht nach Verlängern erneut und zeigt keinen Erinnern-Knopf', async () => {
-    let startDate = '2026-03-01'
-    let reminderSent: string | null = null
+  it('speichert den gewählten Status und bietet Erinnern neben der Statusauswahl', async () => {
+    let submitted: Record<string, unknown> | null = null
     let detailLoads = 0
     const makeCustomer = () => ({
       id: 1,
@@ -240,9 +218,15 @@ describe('App', () => {
       email: 'ada@example.com',
       subscription_type_id: 1,
       duration_months: 3,
-      start_date: startDate,
-      expires_at: startDate === '2026-06-01' ? '2026-09-01' : '2026-06-01',
-      reminder_sent: reminderSent,
+      start_date: '2026-03-01',
+      expires_at: '2026-06-01',
+      reminder_sent: '2026-03-10T09:00:00+00:00',
+      subscription_status_id: 4,
+      subscription_status_name: 'Beendet',
+      subscription_status_changed: '2026-06-01T00:00:00+00:00',
+      next_subscription_status_id: 3,
+      next_subscription_status_name: 'Säumig',
+      next_subscription_status_at: '2026-06-08T00:00:00+00:00',
     })
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
@@ -254,9 +238,14 @@ describe('App', () => {
           { id: 1, name: 'Skool Test', duration: '3 MONTHS', duration_months: 3, reminder: 'Text' },
         ] }), { status: 200 })
       }
-      if (url === '/api/customers/1/renew') {
-        startDate = '2026-06-01'
-        reminderSent = null
+      if (url === '/api/subscription-statuses') {
+        return new Response(JSON.stringify({ subscription_statuses: [
+          { id: 1, name: 'Bezahlt', duration: null, subject: null, message: null },
+          { id: 2, name: 'Fällig', duration: '0 DAYS', subject: 'Betreff', message: 'Text' },
+        ] }), { status: 200 })
+      }
+      if (url === '/api/customers/1' && init?.method === 'PUT') {
+        submitted = JSON.parse(String(init.body)) as Record<string, unknown>
         return new Response(JSON.stringify({ customer: makeCustomer() }), { status: 200 })
       }
       if (url === '/api/customers/1') {
@@ -273,13 +262,16 @@ describe('App', () => {
     await flushPromises()
     const detail = wrapper.find('[aria-labelledby="subscription-detail-title"]')
 
-    await detail.findAll('button').find((item) => item.text() === 'Verlängern')?.trigger('click')
-    await wrapper.find('[aria-labelledby="renew-title"] button').trigger('click')
+    expect(detail.find('#subscription_status_id').exists()).toBe(true)
+    expect(detail.findAll('button').find((item) => item.text() === 'Erinnern')).toBeDefined()
+    expect(detail.findAll('button').find((item) => item.text() === 'Verlängern')).toBeUndefined()
+    expect(detail.findAll('button').find((item) => item.text() === 'Reaktivieren')).toBeUndefined()
+    expect(detail.text()).not.toContain('E-Mail erneut senden')
+    await detail.find('#subscription_status_id').setValue('1')
+    await detail.find('form').trigger('submit')
     await flushPromises()
-    expect(detailLoads).toBe(2)
-    expect(detail.text()).toContain('01.09.2026')
-
-    expect(detail.findAll('button').find((item) => item.text() === 'Erinnern')).toBeUndefined()
+    expect(submitted).toMatchObject({ subscription_status_id: 1 })
+    expect(detailLoads).toBe(1)
   })
 
   it('lädt die Abonnementliste nach dem Speichern in der Detailansicht erneut', async () => {

@@ -124,12 +124,16 @@ final class CustomerService
     public function create(array $input): array
     {
         $type = $this->subscriptionType($input);
+        $now = new DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $status = isset($input['subscription_status_id'])
+            ? $this->subscriptionStatus($input)
+            : $this->paidStatus();
         $subscription = Subscription::create(
             $type->id,
             $type->duration,
             $this->startDate($input),
-            $this->paidStatus(),
-            new DateTimeImmutable('now', new \DateTimeZone('UTC')),
+            $status,
+            $now,
         );
         $customer = Customer::create(
             $this->string($input, 'name'),
@@ -156,14 +160,15 @@ final class CustomerService
         $customer->changeEmail($this->string($input, 'email'));
         $existing = $customer->subscription();
         $type = $this->subscriptionType($input);
+        $changedAt = new DateTimeImmutable('now', new \DateTimeZone('UTC'));
         $customer->changeSubscription(Subscription::reconstitute(
             (int) $existing->id(),
             $type->id,
             $type->duration,
             $this->startDate($input),
-            $existing->reminderSent(),
-            $existing->status(),
-            $existing->statusChangedAt(),
+            null,
+            $this->subscriptionStatus($input),
+            $changedAt,
         ));
 
         return $this->toArray(
@@ -173,7 +178,7 @@ final class CustomerService
     }
 
     /** @return array<string, mixed>|null */
-    public function renew(int $id): ?array
+    public function renew(int $id, DateTimeImmutable $startsAt): ?array
     {
         $customer = $this->customers->findById($id);
         if ($customer === null) {
@@ -181,14 +186,15 @@ final class CustomerService
         }
 
         $existing = $customer->subscription();
+        $renewedAt = $startsAt->setTimezone(new \DateTimeZone('UTC'));
         $customer->changeSubscription(Subscription::reconstitute(
             (int) $existing->id(),
             $existing->subscriptionTypeId(),
             $existing->duration(),
-            $existing->expiresAt(),
+            $renewedAt,
             null,
-            $existing->status(),
-            $existing->statusChangedAt(),
+            $this->paidStatus(),
+            $renewedAt,
         ));
 
         return $this->toArray(
@@ -249,6 +255,16 @@ final class CustomerService
         $status = $this->subscriptionStatuses->findById(1);
         if ($status === null) {
             throw new \LogicException('Paid subscription status is not configured');
+        }
+        return $status;
+    }
+
+    /** @param array<string, mixed> $input */
+    private function subscriptionStatus(array $input): SubscriptionStatus
+    {
+        $status = $this->subscriptionStatuses->findById($this->integer($input, 'subscription_status_id'));
+        if ($status === null) {
+            throw new InvalidArgumentException('Subscription status was not found');
         }
         return $status;
     }

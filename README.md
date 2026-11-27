@@ -32,9 +32,11 @@ php bin/migrate.php
 php bin/run-reminders.php
 ```
 
-Der Cronjob darf den Vorgang wiederholt ausführen. Bereits versendete Erinnerungen werden über `subscriptions.reminder_sent` nicht erneut ausgelöst.
+Der Cronjob darf den Vorgang wiederholt ausführen. `subscriptions.reminder_sent` enthält den letzten erfolgreichen Versand für den aktuellen Subscription-Status. Bei einem tatsächlichen Statuswechsel wird der Wert zurückgesetzt; ein gleichbleibender Status ändert weder Statuszeitpunkt noch Versandzeitpunkt.
 
-In der Kundenliste und in der Abonnementdetailansicht kann über **Erinnern** unabhängig vom Ablaufdatum eine E-Mail ausgelöst werden, wenn `reminder_sent` leer ist. Ist bereits eine Erinnerung markiert, setzt eine ausdrücklich bestätigte erneute Aktion ausschließlich `reminder_sent` auf `NULL`; sie versendet keine E-Mail. Ein weiterer Klick auf **Erinnern** versendet dann die E-Mail. Bei einem fehlgeschlagenen Versand der ersten Erinnerung bleibt `reminder_sent` leer.
+In der Abonnementdetailansicht kann der Status im Bearbeitungsformular gewählt und gespeichert werden. Jeder Speichervorgang setzt `subscription_status_changed` auf den aktuellen Zeitpunkt und `reminder_sent` auf `NULL`. Über **Erinnern** direkt neben dem Statusfeld kann die E-Mail des gespeicherten aktuellen Status erneut versendet werden. Ein fehlgeschlagener E-Mail-Versand bleibt vom erfolgreich persistierten Statuswechsel getrennt und wird separat im Ergebnis gemeldet.
+
+E-Mail-Betreff und vollständiger Nachrichtentext kommen aus `subscription_status`. Unterstützte Platzhalter sind unter anderem `{{customer_name}}`, `{{customer_email}}`, `{{duration}}`, `{{duration_months}}`, `{{start_date}}`, `{{expires_at}}`, `{{subscription_status}}` und `{{subscription_status_changed}}`. Unbekannte Platzhalter führen zu einem Versandfehler.
 
 Die Vue-Oberfläche verwendet Vue Router und Tailwind CSS. Geschützte Routen starten standardmäßig unter `/subscriptions`; `/subscriptions/new` erstellt ein neues Abonnement und `/subscriptions/:id` öffnet die Detailansicht.
 

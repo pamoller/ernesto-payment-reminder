@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import type { SubscriptionType } from '../types'
+import type { SubscriptionStatus, SubscriptionType } from '../types'
 
 const props = defineProps<{
-  modelValue: { name: string; email: string; subscription_type_id: number; start_date: string }
+  modelValue: { name: string; email: string; subscription_type_id: number; subscription_status_id: number; start_date: string }
   subscriptionTypes: SubscriptionType[]
+  subscriptionStatuses: SubscriptionStatus[]
+  canRemind: boolean
   busy: boolean
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: typeof props.modelValue]
   submit: []
+  remind: []
 }>()
 
 function update(field: keyof typeof props.modelValue, event: Event): void {
   const target = event.target as HTMLInputElement | HTMLSelectElement
-  const value = field === 'subscription_type_id' ? Number(target.value) : target.value
+  const value = field === 'subscription_type_id' || field === 'subscription_status_id'
+    ? Number(target.value)
+    : target.value
   emit('update:modelValue', { ...props.modelValue, [field]: value })
 }
 
@@ -47,6 +52,22 @@ function durationLabel(duration: string): string {
           {{ type.name }} ({{ durationLabel(type.duration) }})
         </option>
       </select>
+    </div>
+    <div>
+      <label for="subscription_status_id" class="mb-1 block text-sm font-semibold text-slate-800">Status</label>
+      <div class="flex gap-2">
+        <select id="subscription_status_id" :value="modelValue.subscription_status_id" @change="update('subscription_status_id', $event)" required class="w-1/3 min-w-0 rounded border border-slate-300 px-3 py-2">
+          <option v-for="status in subscriptionStatuses" :key="status.id" :value="status.id">
+            {{ status.name }}
+          </option>
+        </select>
+        <button
+          type="button"
+          :disabled="busy || !canRemind"
+          class="shrink-0 rounded bg-ernesto-blue px-4 py-2 text-white disabled:opacity-50"
+          @click="emit('remind')"
+        >Erinnern</button>
+      </div>
     </div>
     <div>
       <label for="start_date" class="mb-1 block text-sm font-semibold text-slate-800">Beginn</label>

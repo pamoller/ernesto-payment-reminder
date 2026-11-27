@@ -16,7 +16,7 @@ final class Subscription
     private function __construct(
         private readonly int $subscriptionTypeId,
         private readonly string $duration,
-        private readonly DateTimeImmutable $startsAt,
+        private DateTimeImmutable $startsAt,
         ?DateTimeImmutable $reminderSent,
         private SubscriptionStatus $status,
         private DateTimeImmutable $statusChangedAt,
@@ -164,7 +164,30 @@ final class Subscription
 
         $this->status = $target;
         $this->statusChangedAt = $changedAt;
+        $this->reminderSent = null;
         return true;
+    }
+
+    public function registerPayment(SubscriptionStatus $paid, DateTimeImmutable $paidAt): bool
+    {
+        if (!in_array($this->status->id(), [2, 3], true)) {
+            throw new LogicException('Payment can only be registered for a due or overdue subscription');
+        }
+
+        $changed = $this->transitionTo($paid, $paidAt);
+        $this->startsAt = $paidAt->setTime(0, 0);
+        return $changed;
+    }
+
+    public function reactivate(SubscriptionStatus $paid, DateTimeImmutable $reactivatedAt): bool
+    {
+        if ($this->status->id() !== 4) {
+            throw new LogicException('Only an ended subscription can be reactivated');
+        }
+
+        $changed = $this->transitionTo($paid, $reactivatedAt);
+        $this->startsAt = $reactivatedAt->setTime(0, 0);
+        return $changed;
     }
 
     public function setStatusAdministratively(SubscriptionStatus $target, DateTimeImmutable $changedAt): bool
@@ -174,6 +197,7 @@ final class Subscription
         }
         $this->status = $target;
         $this->statusChangedAt = $changedAt;
+        $this->reminderSent = null;
         return true;
     }
 

@@ -4,20 +4,26 @@ import { useRoute, useRouter } from 'vue-router'
 import { onBeforeUnmount } from 'vue'
 import SubscriptionForm from './SubscriptionForm.vue'
 import { auth } from '../auth'
-import { SUBSCRIPTIONS_REFRESH_EVENT, type Customer, type SubscriptionType } from '../types'
+import { SUBSCRIPTIONS_REFRESH_EVENT, type Customer, type SubscriptionStatus, type SubscriptionType } from '../types'
 
 const route = useRoute()
 const router = useRouter()
 const id = computed(() => route.params.id ? Number(route.params.id) : null)
 const types = ref<SubscriptionType[]>([])
+const statuses = ref<SubscriptionStatus[]>([])
 const customer = ref<Customer | null>(null)
 const original = ref<Customer | null>(null)
-const form = reactive({ name: '', email: '', subscription_type_id: 0, start_date: new Date().toISOString().slice(0, 10) })
+const form = reactive({
+  name: '',
+  email: '',
+  subscription_type_id: 0,
+  subscription_status_id: 1,
+  start_date: new Date().toISOString().slice(0, 10),
+})
 const busy = ref(false)
 const error = ref('')
 const success = ref('')
-const changeReminderDialog = ref(false)
-const renewDialog = ref(false)
+const resendDialog = ref(false)
 
 function close(): void {
   void router.push('/subscriptions')
@@ -30,7 +36,9 @@ function closeOnEscape(event: KeyboardEvent): void {
 const dirty = computed(() => {
   if (!original.value) return form.name !== '' || form.email !== '' || form.start_date !== new Date().toISOString().slice(0, 10)
   return form.name !== original.value.name || form.email !== original.value.email
-    || form.subscription_type_id !== original.value.subscription_type_id || form.start_date !== original.value.start_date
+    || form.subscription_type_id !== original.value.subscription_type_id
+    || form.subscription_status_id !== original.value.subscription_status_id
+    || form.start_date !== original.value.start_date
 })
 
 function updateForm(value: typeof form): void {
@@ -54,6 +62,13 @@ async function loadTypes(): Promise<void> {
   if (!id.value && types.value.length) form.subscription_type_id = types.value[0].id
 }
 
+async function loadStatuses(): Promise<void> {
+  const response = await fetch('/api/subscription-statuses')
+  if (!response.ok) throw new Error('Abonnementstatus konnten nicht geladen werden')
+  const body = await response.json() as { subscription_statuses?: SubscriptionStatus[] }
+  statuses.value = body.subscription_statuses ?? []
+}
+
 async function loadCustomer(): Promise<void> {
   if (!id.value) return
   const response = await fetch(`/api/customers/${id.value}`)
@@ -65,38 +80,9 @@ async function loadCustomer(): Promise<void> {
     name: body.customer.name,
     email: body.customer.email,
     subscription_type_id: body.customer.subscription_type_id,
+    subscription_status_id: body.customer.subscription_status_id,
     start_date: body.customer.start_date,
   })
-}
-
-function formatDate(value: string): string {
-  const [year, month, day] = value.slice(0, 10).split('-')
-  return `${day}.${month}.${year}`
-}
-
-function formatTimestamp(value: string | null | undefined, fallback = 'Noch nicht verfügbar'): string {
-  if (!value) return fallback
-  return new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
-}
-
-function remainingDays(): number {
-  if (!customer.value) return 0
-  return Math.ceil((new Date(`${customer.value.expires_at}T00:00:00`).getTime() - Date.now()) / 86400000)
-}
-
-function durationLabel(): string {
-  if (!customer.value) return ''
-  const duration = customer.value.duration
-    ?? types.value.find((type) => type.id === customer.value?.subscription_type_id)?.duration
-    ?? `${customer.value.duration_months ?? ''} months`
-  const match = /^(\d+) (DAY|DAYS|WEEK|WEEKS|MONTH|MONTHS|YEAR|YEARS)$/i.exec(duration)
-  if (!match) return duration
-  const amount = Number(match[1])
-  const unit = match[2].toUpperCase()
-  if (unit.startsWith('DAY')) return `${amount} ${amount === 1 ? 'Tag' : 'Tage'}`
-  if (unit.startsWith('WEEK')) return `${amount} ${amount === 1 ? 'Woche' : 'Wochen'}`
-  if (unit.startsWith('MONTH')) return `${amount} ${amount === 1 ? 'Monat' : 'Monate'}`
-  return `${amount} ${amount === 1 ? 'Jahr' : 'Jahre'}`
 }
 
 async function save(): Promise<void> {
@@ -104,15 +90,10 @@ async function save(): Promise<void> {
   error.value = ''
   success.value = ''
 
-  if (original.value?.reminder_sent && original.value
-    && (form.start_date !== original.value.start_date || form.subscription_type_id !== original.value.subscription_type_id)) {
-    changeReminderDialog.value = true
-    return
-  }
-  await persist(false)
+  await persist()
 }
 
-async function persist(resetReminder: boolean): Promise<void> {
+async function persist(): Promise<void> {
   busy.value = true
   try {
     const response = await fetch(id.value ? `/api/customers/${id.value}` : '/api/customers', {
@@ -129,40 +110,17 @@ async function persist(resetReminder: boolean): Promise<void> {
         name: body.customer.name,
         email: body.customer.email,
         subscription_type_id: body.customer.subscription_type_id,
+        subscription_status_id: body.customer.subscription_status_id,
         start_date: body.customer.start_date,
       })
     }
     window.dispatchEvent(new Event(SUBSCRIPTIONS_REFRESH_EVENT))
-    if (resetReminder && id.value) {
-      const reminderResponse = await fetch(`/api/customers/${id.value}/remind`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth.csrfToken },
-        body: JSON.stringify({ authorise_repeated_reminder: true }),
-      })
-      const reminderBody = await reminderResponse.json() as { reminder_sent?: string | null; reset?: boolean; error?: string }
-      if (!reminderResponse.ok) {
-        error.value = 'Das Abonnement wurde gespeichert. Der Erinnerungsstatus konnte jedoch nicht zurückgesetzt werden.'
-        await loadCustomer()
-        return
-      }
-      success.value = reminderBody.reset
-        ? 'Abonnement gespeichert. Erinnerungsstatus zurückgesetzt; es wurde keine E-Mail versendet.'
-        : 'Abonnement gespeichert und Zahlungserinnerung versendet.'
-      await loadCustomer()
-      window.dispatchEvent(new Event(SUBSCRIPTIONS_REFRESH_EVENT))
-      return
-    }
     await router.replace('/subscriptions')
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
   } finally {
     busy.value = false
   }
-}
-
-function chooseChangeReminder(action: 'save-and-reset' | 'save-only'): void {
-  changeReminderDialog.value = false
-  void persist(action === 'save-and-reset')
 }
 
 async function deleteCustomer(): Promise<void> {
@@ -185,33 +143,35 @@ async function deleteCustomer(): Promise<void> {
   }
 }
 
-function renewSubscription(): void {
+async function runLifecycleAction(
+  path: string,
+  method = 'POST',
+  body?: Record<string, unknown>,
+): Promise<void> {
   if (!id.value || busy.value) return
-  if (dirty.value) {
-    error.value = 'Bitte speichern Sie die Änderungen, bevor Sie das Abonnement verlängern.'
-    return
-  }
-  renewDialog.value = true
-}
-
-async function confirmRenewal(): Promise<void> {
-  if (!id.value || busy.value) return
-  renewDialog.value = false
   busy.value = true
   error.value = ''
   success.value = ''
   try {
-    const response = await fetch(`/api/customers/${id.value}/renew`, {
-      method: 'POST',
-      headers: { 'X-CSRF-Token': auth.csrfToken },
+    const response = await fetch(`/api/customers/${id.value}/${path}`, {
+      method,
+      headers: body
+        ? { 'Content-Type': 'application/json', 'X-CSRF-Token': auth.csrfToken }
+        : { 'X-CSRF-Token': auth.csrfToken },
+      body: body ? JSON.stringify(body) : undefined,
     })
-    const body = await response.json() as { customer?: Customer; error?: string }
-    if (!response.ok || !body.customer) {
-      throw new Error(body.error ?? 'Abonnement konnte nicht verlängert werden')
+    const payload = await response.json() as {
+      changed?: boolean
+      email_sent?: boolean
+      email_error?: string | null
+      error?: string
     }
+    if (!response.ok) throw new Error(payload.error ?? 'Aktion konnte nicht abgeschlossen werden')
     await loadCustomer()
     window.dispatchEvent(new Event(SUBSCRIPTIONS_REFRESH_EVENT))
-    success.value = 'Abonnement verlängert. Startdatum und Erinnerungsstatus wurden aktualisiert.'
+    success.value = payload.email_error
+      ?? (payload.email_sent ? 'Status wurde geändert und die E-Mail versendet.'
+        : payload.changed ? 'Status wurde geändert.' : 'Aktion wurde abgeschlossen.')
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
   } finally {
@@ -219,16 +179,21 @@ async function confirmRenewal(): Promise<void> {
   }
 }
 
+function confirmResend(): void {
+  resendDialog.value = false
+  void runLifecycleAction('status-email')
+}
+
 watch(id, async () => {
   error.value = ''
   success.value = ''
-  await Promise.all([loadTypes(), loadCustomer()])
+  await Promise.all([loadTypes(), loadStatuses(), loadCustomer()])
 })
 
 onMounted(async () => {
   window.addEventListener('keydown', closeOnEscape)
   try {
-    await Promise.all([loadTypes(), loadCustomer()])
+    await Promise.all([loadTypes(), loadStatuses(), loadCustomer()])
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Unbekannter Fehler'
   }
@@ -258,22 +223,15 @@ onBeforeUnmount(() => {
         <p v-if="error" role="alert" class="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700">{{ error }}</p>
         <p v-if="success" role="status" class="mb-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">{{ success }}</p>
 
-        <div v-if="id && customer" class="mb-5 grid gap-2 rounded border border-ernesto-blue/20 bg-white p-4 text-sm sm:grid-cols-3">
-          <div><span class="block font-semibold">Status</span>{{ customer.subscription_status_name }}</div>
-          <div><span class="block font-semibold">Status geändert am</span>{{ formatTimestamp(customer.subscription_status_changed) }}</div>
-          <div><span class="block font-semibold">Reguläres Fälligkeitsdatum</span>{{ formatDate(customer.expires_at) }}</div>
-          <div><span class="block font-semibold">Nächster Status</span>{{ customer.next_subscription_status_name ?? 'Kein automatischer Wechsel' }}</div>
-          <div><span class="block font-semibold">Nächster Wechsel</span>{{ formatTimestamp(customer.next_subscription_status_at, 'Kein automatischer Wechsel') }}</div>
-          <div><span class="block font-semibold">Tage</span>{{ remainingDays() }}</div>
-          <div><span class="block font-semibold">Versandstatus</span>{{ formatTimestamp(customer.reminder_sent, 'Noch nicht versendet') }}</div>
-        </div>
-
         <SubscriptionForm
           :model-value="form"
           :subscription-types="types"
+          :subscription-statuses="statuses"
+          :can-remind="id !== null && !dirty"
           :busy="busy"
           @update:model-value="updateForm"
           @submit="save"
+          @remind="resendDialog = true"
         >
           <template #actions>
             <div class="flex flex-wrap items-center gap-3 border-t border-ernesto-blue/20 pt-5">
@@ -283,9 +241,13 @@ onBeforeUnmount(() => {
               <button type="button" class="rounded bg-ernesto-blue px-4 py-2 text-white" @click="close">Abbrechen</button>
               <button v-if="id" type="button" :disabled="busy" class="rounded border border-red-200 px-4 py-2 text-red-700" @click="deleteCustomer">Löschen</button>
               <div v-if="id" class="ml-auto flex gap-2">
-                <button type="button" :disabled="dirty || busy" class="rounded bg-ernesto-blue px-4 py-2 text-white disabled:opacity-50" @click="renewSubscription">
-                  Verlängern
-                </button>
+                <button
+                  v-if="customer && [2, 3].includes(customer.subscription_status_id)"
+                  type="button"
+                  :disabled="dirty || busy"
+                  class="rounded bg-emerald-700 px-4 py-2 text-white disabled:opacity-50"
+                  @click="runLifecycleAction('payment')"
+                >Zahlung registrieren</button>
               </div>
             </div>
           </template>
@@ -293,28 +255,13 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <div v-if="changeReminderDialog" class="fixed inset-0 z-40 grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="change-title">
-      <div class="w-full max-w-md rounded border-2 border-ernesto-blue bg-ernesto-blue p-6 text-white">
-        <h2 id="change-title" class="text-xl font-bold text-white">Erneut erinnern?</h2>
-        <p class="mt-3">Das Abonnement wurde geändert. Soll der Erinnerungsstatus zurückgesetzt werden? Dabei wird keine E-Mail versendet.</p>
-        <div class="mt-5 flex flex-row flex-wrap justify-start gap-2">
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="chooseChangeReminder('save-and-reset')">Speichern und Automatisch erinnern</button>
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="chooseChangeReminder('save-only')">Nur speichern</button>
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="changeReminderDialog = false">Abbrechen</button>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="renewDialog" class="fixed inset-0 z-40 grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="renew-title">
-      <div class="w-full max-w-md rounded border-2 border-ernesto-blue bg-ernesto-blue p-6 text-white">
-        <h2 id="renew-title" class="text-xl font-bold text-white">Abonnement verlängern?</h2>
-        <p class="mt-3">
-          Die Laufzeit von {{ durationLabel() }} beginnt am bisherigen Ablaufdatum
-          {{ customer ? formatDate(customer.expires_at) : '' }} neu. Der Erinnerungsstatus wird zurückgesetzt.
-        </p>
-        <div class="mt-5 flex flex-row flex-wrap justify-start gap-2">
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="confirmRenewal">Verlängern</button>
-          <button type="button" class="rounded border border-white bg-ernesto-blue px-3 py-2 text-white" @click="renewDialog = false">Abbrechen</button>
+    <div v-if="resendDialog" class="fixed inset-0 z-40 grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="resend-title">
+      <div class="w-full max-w-md rounded border-2 border-ernesto-blue bg-white p-6 text-slate-800">
+        <h2 id="resend-title" class="text-xl font-bold">E-Mail erneut senden?</h2>
+        <p class="mt-3">Die E-Mail des aktuellen Status wird erneut an {{ customer?.email }} versendet. Der Abo-Status, das Fälligkeitsdatum und der Statuszeitpunkt bleiben unverändert.</p>
+        <div class="mt-5 flex gap-2">
+          <button type="button" class="rounded bg-ernesto-blue px-3 py-2 text-white" @click="confirmResend">E-Mail senden</button>
+          <button type="button" class="rounded border px-3 py-2" @click="resendDialog = false">Abbrechen</button>
         </div>
       </div>
     </div>
