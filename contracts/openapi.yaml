@@ -154,52 +154,15 @@ paths:
           description: Customer deleted
         '404':
           description: Not found
-  /api/customers/{id}/remind:
+  /api/customers/{id}/renew:
     post:
-      summary: Send a reminder email immediately
-      description: May be called before subscription expiry and replaces reminder_sent with the new send time.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: X-CSRF-Token
-          in: header
-          required: true
-          schema:
-            type: string
+      summary: Renew a subscription from the current time
+      description: Resets the subscription to paid, uses the same instant for start and status change, and clears reminder_sent.
       responses:
         '200':
-          description: Reminder email sent
+          description: Subscription renewed
         '404':
           description: Customer not found
-        '409':
-          description: Reminder state changed while sending was requested
-        '419':
-          description: Invalid CSRF token
-        '502':
-          description: SMTP delivery failed
-  /api/customers/{id}/payment:
-    post:
-      summary: Register a payment and return a due or overdue subscription to paid
-      responses:
-        '200':
-          description: Subscription state persisted; includes email delivery result
-        '409':
-          description: Subscription state changed concurrently
-        '422':
-          description: Payment transition is not valid for the current state
-  /api/customers/{id}/reactivate:
-    post:
-      summary: Reactivate an ended subscription
-      responses:
-        '200':
-          description: Subscription reactivated
-        '409':
-          description: Subscription state changed concurrently
-        '422':
-          description: Current state cannot be reactivated
   /api/customers/{id}/status-email:
     post:
       summary: Resend the email for the current subscription status

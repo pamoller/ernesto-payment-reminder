@@ -4,18 +4,18 @@ declare(strict_types=1);
 
 use App\Infrastructure\Http\HealthController;
 use App\Application\Customer\CustomerService;
+use App\Application\Customer\CustomerMapper;
+use App\Infrastructure\Clock\SystemClock;
 use App\Infrastructure\Database\PdoCustomerRepository;
 use App\Infrastructure\Database\PdoFactory;
 use App\Infrastructure\Database\PdoSubscriptionTypeRepository;
 use App\Infrastructure\Database\PdoSubscriptionStatusRepository;
 use App\Infrastructure\Http\CustomerController;
 use App\Infrastructure\Http\AuthController;
-use App\Infrastructure\Http\ReminderController;
 use App\Infrastructure\Http\SubscriptionLifecycleController;
 use App\Infrastructure\Auth\SessionAuth;
 use App\Infrastructure\Auth\Csrf;
 use App\Application\Reminder\ErrorLogReminderLogger;
-use App\Application\Reminder\ReminderService;
 use App\Application\Customer\SubscriptionLifecycleService;
 use App\Infrastructure\Reminder\PhpmailerReminderMailer;
 use Slim\Factory\AppFactory;
@@ -48,10 +48,13 @@ $app->post('/api/auth/logout', [$authController, 'logout']);
 
 $pdo = PdoFactory::create();
 $customerRepository = new PdoCustomerRepository($pdo);
+$clock = new SystemClock();
 $customerService = new CustomerService(
     $customerRepository,
     new PdoSubscriptionTypeRepository($pdo),
     new PdoSubscriptionStatusRepository($pdo),
+    $clock,
+    new CustomerMapper(),
 );
 $customerController = new CustomerController(
     $customerService,
@@ -67,17 +70,10 @@ $mailer = new PhpmailerReminderMailer(
     getenv('SMTP_SECURE') ?: 'tls',
 );
 $logger = new ErrorLogReminderLogger();
-$reminderController = new ReminderController(
-    new ReminderService(
-        $customerRepository,
-        $mailer,
-        $logger,
-    ),
-);
-$statusRepository = new PdoSubscriptionStatusRepository($pdo);
 $lifecycleController = new SubscriptionLifecycleController(
-    new SubscriptionLifecycleService($customerRepository, $statusRepository, $mailer, $logger),
+    new SubscriptionLifecycleService($customerRepository, $mailer, $logger),
     $customerService,
+    $clock,
 );
 
 $app->get('/api/customers', [$customerController, 'list'])->add(new SessionAuth());
@@ -88,8 +84,5 @@ $app->get('/api/customers/{id}', [$customerController, 'get'])->add(new SessionA
 $app->put('/api/customers/{id}', [$customerController, 'update'])->add(new SessionAuth());
 $app->post('/api/customers/{id}/renew', [$customerController, 'renew'])->add(new SessionAuth());
 $app->delete('/api/customers/{id}', [$customerController, 'delete'])->add(new SessionAuth());
-$app->post('/api/customers/{id}/remind', [$reminderController, 'send'])->add(new SessionAuth());
-$app->post('/api/customers/{id}/payment', [$lifecycleController, 'registerPayment'])->add(new SessionAuth());
-$app->post('/api/customers/{id}/reactivate', [$lifecycleController, 'reactivate'])->add(new SessionAuth());
 $app->post('/api/customers/{id}/status-email', [$lifecycleController, 'resend'])->add(new SessionAuth());
 $app->run();

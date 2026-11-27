@@ -11,16 +11,21 @@ use App\Domain\Customer\SubscriptionStatus;
 use App\Domain\Customer\SubscriptionType;
 use DateTimeImmutable;
 use PDO;
+use App\Application\Common\Clock;
+use App\Infrastructure\Clock\SystemClock;
 
 final class PdoCustomerRepository implements CustomerRepository
 {
-    public function __construct(private readonly PDO $pdo)
+    private readonly Clock $clock;
+
+    public function __construct(private readonly PDO $pdo, ?Clock $clock = null)
     {
+        $this->clock = $clock ?? new SystemClock();
     }
 
     public function save(Customer $customer): Customer
     {
-        $now = (new DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        $now = $this->clock->now()->format('Y-m-d H:i:s');
 
         $this->pdo->beginTransaction();
         try {
@@ -58,7 +63,8 @@ final class PdoCustomerRepository implements CustomerRepository
                 $statement = $this->pdo->prepare(
                     'UPDATE subscriptions
                      SET subscription_type_id = ?, subscription_status_id = ?,
-                         subscription_status_changed = ?, starts_at = ?, reminder_sent = ?, updated_at = ?
+                         subscription_status_changed = ?, starts_at = ?, reminder_sent = ?,
+                         reminder_claimed_at = NULL, updated_at = ?
                      WHERE customer_id = ?',
                 );
                 $reminderSent = $subscription->reminderSent() === null
@@ -143,13 +149,13 @@ final class PdoCustomerRepository implements CustomerRepository
         $statement = $this->pdo->prepare(
             'UPDATE subscriptions
              SET subscription_status_id = ?, subscription_status_changed = ?,
-                 starts_at = ?, reminder_sent = ?, updated_at = ?
+                 starts_at = ?, reminder_sent = ?, reminder_claimed_at = NULL, updated_at = ?
              WHERE id = ? AND subscription_status_id = ? AND subscription_status_changed = ?',
         );
         $reminderSent = $subscription->reminderSent() === null
             ? null
             : $this->formatTimestamp($subscription->reminderSent());
-        $now = (new DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
+        $now = $this->clock->now()->format('Y-m-d H:i:s');
         $statement->execute([
             $subscription->status()->id(),
             $this->formatTimestamp($subscription->statusChangedAt()),
@@ -163,94 +169,69 @@ final class PdoCustomerRepository implements CustomerRepository
         return $statement->rowCount() > 0;
     }
 
-    public function tryClaimReminder(int $subscriptionId, DateTimeImmutable $sentAt): bool
-    {
+    public function claimEmailDelivery(
+        int $subscriptionId,
+        int $expectedStatusId,
+        DateTimeImmutable $claimedAt,
+        DateTimeImmutable $staleBefore,
+    ): bool {
         $statement = $this->pdo->prepare(
             'UPDATE subscriptions
-             SET reminder_sent = ?, updated_at = ?
-             WHERE id = ? AND reminder_sent IS NULL',
+             SET reminder_claimed_at = ?, updated_at = ?
+             WHERE id = ? AND subscription_status_id = ?
+               AND (reminder_claimed_at IS NULL OR reminder_claimed_at < ?)',
         );
-        $timestamp = $this->formatTimestamp($sentAt);
         $statement->execute([
-            $timestamp,
-            $timestamp,
+            $this->formatTimestamp($claimedAt),
+            $this->formatTimestamp($claimedAt),
             $subscriptionId,
+            $expectedStatusId,
+            $this->formatTimestamp($staleBefore),
         ]);
         return $statement->rowCount() > 0;
     }
 
-    public function clearReminderSent(int $subscriptionId, DateTimeImmutable $sentAt): bool
-    {
-        return $this->restoreReminderSent($subscriptionId, $sentAt, null);
-    }
-
-    public function trySetReminderSent(
+    public function markEmailDelivered(
         int $subscriptionId,
-        ?DateTimeImmutable $expectedSentAt,
+        int $expectedStatusId,
+        DateTimeImmutable $claimedAt,
         DateTimeImmutable $sentAt,
-        ?int $expectedStatusId = null,
     ): bool {
-        $timestamp = $this->formatTimestamp($sentAt);
-        $updatedAt = (new DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
-        if ($expectedSentAt === null) {
-            $statement = $this->pdo->prepare(
-                'UPDATE subscriptions
-                 SET reminder_sent = ?, updated_at = ?
-                 WHERE id = ? AND reminder_sent IS NULL'
-                . ($expectedStatusId === null ? '' : ' AND subscription_status_id = ?'),
-            );
-            $parameters = [$timestamp, $updatedAt, $subscriptionId];
-            if ($expectedStatusId !== null) {
-                $parameters[] = $expectedStatusId;
-            }
-            $statement->execute($parameters);
-        } else {
-            $statement = $this->pdo->prepare(
-                'UPDATE subscriptions
-                 SET reminder_sent = ?, updated_at = ?
-                 WHERE id = ? AND (reminder_sent = ? OR reminder_sent = ?)'
-                . ($expectedStatusId === null ? '' : ' AND subscription_status_id = ?'),
-            );
-            $parameters = [
-                $timestamp,
-                $updatedAt,
-                $subscriptionId,
-                $this->formatTimestamp($expectedSentAt),
-                $expectedSentAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
-            ];
-            if ($expectedStatusId !== null) {
-                $parameters[] = $expectedStatusId;
-            }
-            $statement->execute($parameters);
-        }
+        $statement = $this->pdo->prepare(
+            'UPDATE subscriptions
+             SET reminder_sent = ?, reminder_claimed_at = NULL, updated_at = ?
+             WHERE id = ? AND subscription_status_id = ? AND
+                   (reminder_claimed_at = ? OR reminder_claimed_at = ?)',
+        );
+        $statement->execute([
+            $this->formatTimestamp($sentAt),
+            $this->formatTimestamp($sentAt),
+            $subscriptionId,
+            $expectedStatusId,
+            $this->formatTimestamp($claimedAt),
+            $claimedAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+        ]);
         return $statement->rowCount() > 0;
     }
 
-    public function restoreReminderSent(
+    public function releaseEmailClaim(
         int $subscriptionId,
+        int $expectedStatusId,
         DateTimeImmutable $claimedAt,
-        ?DateTimeImmutable $previousSentAt,
-        ?int $expectedStatusId = null,
     ): bool {
-        $claimedTimestamp = $this->formatTimestamp($claimedAt);
-        $updatedAt = (new DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');
-        $restoreTimestamp = $previousSentAt === null ? null : $this->formatTimestamp($previousSentAt);
         $statement = $this->pdo->prepare(
-            'UPDATE subscriptions SET reminder_sent = ?, updated_at = ?
-             WHERE id = ? AND (reminder_sent = ? OR reminder_sent = ?)'
-            . ($expectedStatusId === null ? '' : ' AND subscription_status_id = ?'),
+            'UPDATE subscriptions
+             SET reminder_claimed_at = NULL, updated_at = ?
+             WHERE id = ? AND subscription_status_id = ? AND
+                   (reminder_claimed_at = ? OR reminder_claimed_at = ?)',
         );
-        $parameters = [
-            $restoreTimestamp,
-            $updatedAt,
+        $statement->execute([
+            $this->formatTimestamp($claimedAt),
             $subscriptionId,
-            $claimedTimestamp,
+            $expectedStatusId,
+            $this->formatTimestamp($claimedAt),
             $claimedAt->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
-        ];
-        if ($expectedStatusId !== null) {
-            $parameters[] = $expectedStatusId;
-        }
-        $statement->execute($parameters);
+        ]);
         return $statement->rowCount() > 0;
     }
 

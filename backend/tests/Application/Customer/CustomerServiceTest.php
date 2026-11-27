@@ -10,6 +10,8 @@ use App\Domain\Customer\CustomerRepository;
 use App\Domain\Customer\Subscription;
 use App\Domain\Customer\SubscriptionStatus;
 use App\Domain\Customer\SubscriptionStatusRepository;
+use App\Application\Common\Clock;
+use App\Application\Customer\CustomerMapper;
 use App\Domain\Customer\SubscriptionType;
 use App\Domain\Customer\SubscriptionTypeRepository;
 use DateTimeImmutable;
@@ -37,7 +39,13 @@ final class CustomerServiceTest extends TestCase
             });
 
         $statuses = $this->statusRepository();
-        $result = (new CustomerService($customers, $types, $statuses))->create([
+        $result = (new CustomerService(
+            $customers,
+            $types,
+            $statuses,
+            $this->clock(),
+            new CustomerMapper(),
+        ))->create([
             'name' => 'Ada Lovelace',
             'email' => 'ada@example.com',
             'subscription_type_id' => 42,
@@ -71,6 +79,8 @@ final class CustomerServiceTest extends TestCase
             $customers,
             $types,
             $this->createMock(SubscriptionStatusRepository::class),
+            $this->clock(),
+            new CustomerMapper(),
         ))->create([
             'name' => 'Ada Lovelace',
             'email' => 'ada@example.com',
@@ -97,9 +107,15 @@ final class CustomerServiceTest extends TestCase
         $type = new SubscriptionType(42, 'Skool Halbjahres Abo', '6 MONTHS', 'Text');
         $types = $this->createMock(SubscriptionTypeRepository::class);
         $types->method('findById')->willReturn($type);
-        $before = new DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $changedAt = new DateTimeImmutable('2026-06-20T14:25:30Z');
 
-        $result = (new CustomerService($customers, $types, $this->statusRepository()))->update(7, [
+        $result = (new CustomerService(
+            $customers,
+            $types,
+            $this->statusRepository(),
+            $this->clock($changedAt),
+            new CustomerMapper(),
+        ))->update(7, [
             'name' => 'Ada Lovelace',
             'email' => 'ada@example.com',
             'subscription_type_id' => 42,
@@ -109,10 +125,48 @@ final class CustomerServiceTest extends TestCase
 
         self::assertSame(3, $result['subscription_status_id']);
         self::assertNull($result['reminder_sent']);
-        self::assertGreaterThanOrEqual(
-            $before->format('U'),
-            (new DateTimeImmutable($result['subscription_status_changed']))->format('U'),
+        self::assertSame(
+            $changedAt->format('Y-m-d\TH:i:s.uP'),
+            $result['subscription_status_changed'],
         );
+    }
+
+    public function testUnchangedStatusPreservesTimestampAndDeliveryTimestamp(): void
+    {
+        $statusChanged = new DateTimeImmutable('2026-01-15T09:00:00Z');
+        $reminderSent = new DateTimeImmutable('2026-03-20T09:00:00Z');
+        $subscription = Subscription::reconstitute(
+            12,
+            42,
+            '6 MONTHS',
+            new DateTimeImmutable('2026-01-15T00:00:00Z'),
+            $reminderSent,
+            new SubscriptionStatus(2, 'Fällig', '0 DAYS', 'Betreff', 'Text'),
+            $statusChanged,
+        );
+        $customer = Customer::reconstitute(7, 'Ada Lovelace', 'ada@example.com', $subscription);
+        $customers = $this->createMock(CustomerRepository::class);
+        $customers->method('findById')->willReturn($customer);
+        $customers->method('save')->willReturnCallback(static fn (Customer $saved): Customer => $saved);
+        $types = $this->createMock(SubscriptionTypeRepository::class);
+        $types->method('findById')->willReturn(new SubscriptionType(42, 'Halbjahr', '6 MONTHS', 'Text'));
+
+        $result = (new CustomerService(
+            $customers,
+            $types,
+            $this->statusRepository(),
+            $this->clock(new DateTimeImmutable('2026-06-20T14:25:30Z')),
+            new CustomerMapper(),
+        ))->update(7, [
+            'name' => 'Ada Lovelace',
+            'email' => 'ada@example.com',
+            'subscription_type_id' => 42,
+            'subscription_status_id' => 2,
+            'start_date' => '2026-01-15',
+        ]);
+
+        self::assertSame($statusChanged->format('Y-m-d\TH:i:s.uP'), $result['subscription_status_changed']);
+        self::assertSame($reminderSent->format('Y-m-d\TH:i:s.uP'), $result['reminder_sent']);
     }
 
     public function testRenewStartsNowAndResetsStatusDelivery(): void
@@ -136,7 +190,9 @@ final class CustomerServiceTest extends TestCase
             $customers,
             $this->createMock(SubscriptionTypeRepository::class),
             $this->statusRepository(),
-        ))->renew(7, $now);
+            $this->clock($now),
+            new CustomerMapper(),
+        ))->renew(7);
 
         self::assertSame('2026-06-20', $result['start_date']);
         self::assertSame('2026-12-20', $result['expires_at']);
@@ -146,6 +202,13 @@ final class CustomerServiceTest extends TestCase
             $result['subscription_status_changed'],
         );
         self::assertNull($result['reminder_sent']);
+    }
+
+    private function clock(?DateTimeImmutable $now = null): Clock
+    {
+        $clock = $this->createMock(Clock::class);
+        $clock->method('now')->willReturn($now ?? new DateTimeImmutable('2026-06-20T14:25:30Z'));
+        return $clock;
     }
 
     private function statusRepository(): SubscriptionStatusRepository

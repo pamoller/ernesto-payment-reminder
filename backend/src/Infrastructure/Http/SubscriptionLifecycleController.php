@@ -5,51 +5,20 @@ declare(strict_types=1);
 namespace App\Infrastructure\Http;
 
 use App\Application\Customer\CustomerService;
-use App\Application\Customer\SubscriptionActionResult;
 use App\Application\Customer\SubscriptionLifecycleService;
 use App\Application\Reminder\ReminderClaimConflict;
-use InvalidArgumentException;
-use LogicException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Throwable;
+use App\Application\Common\Clock;
 
 final class SubscriptionLifecycleController
 {
     public function __construct(
         private readonly SubscriptionLifecycleService $lifecycle,
         private readonly CustomerService $customers,
+        private readonly Clock $clock,
     ) {
-    }
-
-    public function registerPayment(
-        ServerRequestInterface $request,
-        ResponseInterface $response,
-        array $args,
-    ): ResponseInterface {
-        return $this->action(
-            $response,
-            fn (): ?SubscriptionActionResult => $this->lifecycle->registerPayment(
-                (int) $args['id'],
-                new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
-            ),
-            (int) $args['id'],
-        );
-    }
-
-    public function reactivate(
-        ServerRequestInterface $request,
-        ResponseInterface $response,
-        array $args,
-    ): ResponseInterface {
-        return $this->action(
-            $response,
-            fn (): ?SubscriptionActionResult => $this->lifecycle->reactivate(
-                (int) $args['id'],
-                new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
-            ),
-            (int) $args['id'],
-        );
     }
 
     public function resend(
@@ -57,39 +26,23 @@ final class SubscriptionLifecycleController
         ResponseInterface $response,
         array $args,
     ): ResponseInterface {
-        return $this->action(
-            $response,
-            fn (): ?SubscriptionActionResult => $this->lifecycle->resendCurrent(
-                (int) $args['id'],
-                new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
-            ),
-            (int) $args['id'],
-        );
-    }
-
-    private function action(
-        ResponseInterface $response,
-        callable $action,
-        int $customerId,
-    ): ResponseInterface {
         try {
-            $result = $action();
+            $customerId = (int) $args['id'];
+            $result = $this->lifecycle->resendCurrent(
+                $customerId,
+                $this->clock->now(),
+            );
             if ($result === null) {
                 return $this->json($response, ['error' => 'Customer not found'], 404);
             }
-            $customer = $this->customers->find($customerId);
             return $this->json($response, [
-                'customer' => $customer,
+                'customer' => $this->customers->find($customerId),
                 'changed' => $result->changed,
                 'email_sent' => $result->emailSent,
                 'email_error' => $result->emailError,
             ]);
         } catch (ReminderClaimConflict $exception) {
             return $this->json($response, ['error' => $exception->getMessage()], 409);
-        } catch (InvalidArgumentException | LogicException $exception) {
-            return $this->json($response, ['error' => $exception->getMessage()], 422);
-        } catch (\OutOfBoundsException $exception) {
-            return $this->json($response, ['error' => $exception->getMessage()], 404);
         } catch (Throwable $exception) {
             error_log($exception->getMessage());
             return $this->json($response, ['error' => 'Subscription action failed'], 500);

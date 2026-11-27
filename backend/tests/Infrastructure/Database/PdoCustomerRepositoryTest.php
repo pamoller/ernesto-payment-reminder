@@ -71,6 +71,7 @@ final class PdoCustomerRepositoryTest extends TestCase
                 subscription_status_changed TEXT NOT NULL,
                 starts_at TEXT NOT NULL,
                 reminder_sent TEXT NULL,
+                reminder_claimed_at TEXT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,
@@ -115,7 +116,7 @@ final class PdoCustomerRepositoryTest extends TestCase
         self::assertNull($this->repository->findById((int) $saved->id()));
     }
 
-    public function testReminderClaimIsAtomicAndResetIsConditional(): void
+    public function testEmailClaimExpiresAndDeliveryIsStatusBound(): void
     {
         $customer = Customer::create(
             'Ada Lovelace',
@@ -126,21 +127,36 @@ final class PdoCustomerRepositoryTest extends TestCase
         $subscription = $saved->subscription();
         $subscriptionId = (int) $subscription->id();
         $claimedAt = new DateTimeImmutable('2026-04-01T12:00:00Z');
+        $statusId = $subscription->status()->id();
 
-        self::assertTrue($this->repository->tryClaimReminder($subscriptionId, $claimedAt));
-        self::assertFalse($this->repository->tryClaimReminder($subscriptionId, $claimedAt));
-
-        self::assertTrue($this->repository->clearReminderSent(
+        self::assertTrue($this->repository->claimEmailDelivery(
             $subscriptionId,
+            $statusId,
+            $claimedAt,
+            $claimedAt->modify('-1 hour'),
+        ));
+        self::assertFalse($this->repository->claimEmailDelivery(
+            $subscriptionId,
+            $statusId,
+            $claimedAt->modify('+1 minute'),
+            $claimedAt->modify('-59 minutes'),
+        ));
+
+        self::assertTrue($this->repository->markEmailDelivered(
+            $subscriptionId,
+            $statusId,
+            $claimedAt,
             $claimedAt,
         ));
-        self::assertFalse($this->repository->clearReminderSent(
+        self::assertFalse($this->repository->markEmailDelivered(
             $subscriptionId,
+            $statusId,
+            $claimedAt,
             $claimedAt,
         ));
     }
 
-    public function testManualReminderUpdateUsesPreviousSentTimeAsCompareValue(): void
+    public function testExpiredEmailClaimCanBeReclaimed(): void
     {
         $customer = Customer::create(
             'Ada Lovelace',
@@ -149,33 +165,22 @@ final class PdoCustomerRepositoryTest extends TestCase
         );
         $saved = $this->repository->save($customer);
         $subscriptionId = (int) $saved->subscription()->id();
-        $previousSentAt = new DateTimeImmutable('2026-02-01T00:00:00Z');
-        $claimedAt = new DateTimeImmutable('2026-02-02T00:00:00.123456Z');
+        $oldClaim = new DateTimeImmutable('2026-02-01T00:00:00Z');
+        $claimedAt = new DateTimeImmutable('2026-02-01T02:00:00Z');
+        $statement = $this->pdo->prepare('UPDATE subscriptions SET reminder_claimed_at = ? WHERE id = ?');
+        $statement->execute([$oldClaim->format('Y-m-d H:i:s.u'), $subscriptionId]);
 
-        $statement = $this->pdo->prepare('UPDATE subscriptions SET reminder_sent = ? WHERE id = ?');
-        $statement->execute([$previousSentAt->format('Y-m-d H:i:s'), $subscriptionId]);
-
-        self::assertTrue($this->repository->trySetReminderSent(
+        self::assertTrue($this->repository->claimEmailDelivery(
             $subscriptionId,
-            $previousSentAt,
+            $saved->subscription()->status()->id(),
+            $claimedAt,
+            $claimedAt->modify('-1 hour'),
+        ));
+        self::assertTrue($this->repository->releaseEmailClaim(
+            $subscriptionId,
+            $saved->subscription()->status()->id(),
             $claimedAt,
         ));
-        self::assertFalse($this->repository->trySetReminderSent(
-            $subscriptionId,
-            $previousSentAt,
-            new DateTimeImmutable('2026-02-02T00:00:01Z'),
-        ));
-        self::assertTrue($this->repository->restoreReminderSent(
-            $subscriptionId,
-            $claimedAt,
-            $previousSentAt,
-        ));
-
-        $restored = $this->repository->findById((int) $saved->id());
-        self::assertSame(
-            '2026-02-01T00:00:00+00:00',
-            $restored?->subscription()->reminderSent()?->format(DATE_ATOM),
-        );
     }
 
     public function testStateUpdateIsConditionalAndClearsReminderTimestamp(): void

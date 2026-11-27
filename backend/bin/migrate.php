@@ -53,6 +53,7 @@ if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
             subscription_status_changed TEXT NOT NULL,
             starts_at TEXT NOT NULL,
             reminder_sent TEXT NULL,
+            reminder_claimed_at TEXT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,
@@ -89,6 +90,9 @@ if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
     if (!in_array('subscription_status_changed', $subscriptionColumns, true)) {
         $pdo->exec('ALTER TABLE subscriptions ADD COLUMN subscription_status_changed TEXT NULL');
     }
+    if (!in_array('reminder_claimed_at', $subscriptionColumns, true)) {
+        $pdo->exec('ALTER TABLE subscriptions ADD COLUMN reminder_claimed_at TEXT NULL');
+    }
 
     $pending = $pdo->query(
         'SELECT s.id, s.starts_at, st.duration
@@ -112,6 +116,10 @@ if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
     $pdo->exec(
         'CREATE INDEX IF NOT EXISTS idx_subscriptions_reminder_sent
          ON subscriptions(reminder_sent)'
+    );
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_subscriptions_reminder_claimed
+         ON subscriptions(reminder_claimed_at)'
     );
     echo "SQLite migration completed\n";
     exit(0);

@@ -13,6 +13,7 @@ use App\Domain\Customer\SubscriptionType;
 use App\Domain\Customer\SubscriptionTypeRepository;
 use DateTimeImmutable;
 use InvalidArgumentException;
+use App\Application\Common\Clock;
 
 final class CustomerService
 {
@@ -20,6 +21,8 @@ final class CustomerService
         private readonly CustomerRepository $customers,
         private readonly SubscriptionTypeRepository $subscriptionTypes,
         private readonly SubscriptionStatusRepository $subscriptionStatuses,
+        private readonly Clock $clock,
+        private readonly CustomerMapper $mapper,
     ) {
     }
 
@@ -124,7 +127,7 @@ final class CustomerService
     public function create(array $input): array
     {
         $type = $this->subscriptionType($input);
-        $now = new DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $now = $this->clock->now();
         $status = isset($input['subscription_status_id'])
             ? $this->subscriptionStatus($input)
             : $this->paidStatus();
@@ -160,15 +163,16 @@ final class CustomerService
         $customer->changeEmail($this->string($input, 'email'));
         $existing = $customer->subscription();
         $type = $this->subscriptionType($input);
-        $changedAt = new DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $targetStatus = $this->subscriptionStatus($input);
+        $statusChanged = $targetStatus->id() !== $existing->status()->id();
         $customer->changeSubscription(Subscription::reconstitute(
             (int) $existing->id(),
             $type->id,
             $type->duration,
             $this->startDate($input),
-            null,
-            $this->subscriptionStatus($input),
-            $changedAt,
+            $statusChanged ? null : $existing->reminderSent(),
+            $targetStatus,
+            $statusChanged ? $this->clock->now() : $existing->statusChangedAt(),
         ));
 
         return $this->toArray(
@@ -178,7 +182,7 @@ final class CustomerService
     }
 
     /** @return array<string, mixed>|null */
-    public function renew(int $id, DateTimeImmutable $startsAt): ?array
+    public function renew(int $id): ?array
     {
         $customer = $this->customers->findById($id);
         if ($customer === null) {
@@ -186,7 +190,7 @@ final class CustomerService
         }
 
         $existing = $customer->subscription();
-        $renewedAt = $startsAt->setTimezone(new \DateTimeZone('UTC'));
+        $renewedAt = $this->clock->now();
         $customer->changeSubscription(Subscription::reconstitute(
             (int) $existing->id(),
             $existing->subscriptionTypeId(),
@@ -275,25 +279,6 @@ final class CustomerService
      */
     private function toArray(Customer $customer, array $statuses): array
     {
-        $subscription = $customer->subscription();
-        $nextStatus = $subscription->nextAutomaticStatus($statuses);
-        $nextTransitionAt = $subscription->nextAutomaticTransitionAt($statuses);
-        return [
-            'id' => $customer->id(),
-            'name' => $customer->name(),
-            'email' => $customer->email(),
-            'subscription_type_id' => $subscription->subscriptionTypeId(),
-            'duration_months' => $subscription->durationMonths(),
-            'duration' => $subscription->duration(),
-            'start_date' => $subscription->startsAt()->format('Y-m-d'),
-            'expires_at' => $subscription->expiresAt()->format('Y-m-d'),
-            'reminder_sent' => $subscription->reminderSent()?->format('Y-m-d\TH:i:s.uP'),
-            'subscription_status_id' => $subscription->status()->id(),
-            'subscription_status_name' => $subscription->status()->name(),
-            'subscription_status_changed' => $subscription->statusChangedAt()->format('Y-m-d\TH:i:s.uP'),
-            'next_subscription_status_id' => $nextStatus?->id(),
-            'next_subscription_status_name' => $nextStatus?->name(),
-            'next_subscription_status_at' => $nextTransitionAt?->format('Y-m-d\TH:i:s.uP'),
-        ];
+        return $this->mapper->toArray($customer, $statuses);
     }
 }

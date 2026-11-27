@@ -4,284 +4,186 @@ declare(strict_types=1);
 
 namespace App\Tests\Application\Reminder;
 
-use App\Application\Reminder\ReminderService;
-use App\Application\Reminder\ReminderMailer;
 use App\Application\Reminder\ReminderLogger;
-use App\Application\Reminder\ReminderClaimConflict;
-use App\Application\Reminder\ReminderDeliveryFailed;
-use App\Application\Reminder\ReminderAuthorizationRequired;
+use App\Application\Reminder\ReminderMailer;
+use App\Application\Reminder\ReminderService;
 use App\Domain\Customer\Customer;
 use App\Domain\Customer\CustomerRepository;
 use App\Domain\Customer\Subscription;
+use App\Domain\Customer\SubscriptionStatus;
+use App\Domain\Customer\SubscriptionStatusRepository;
 use DateTimeImmutable;
-use RuntimeException;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class ReminderServiceTest extends TestCase
 {
-    public function testDoesNotSendBeforeExpiry(): void
+    public function testTransitionsOneStateAndSendsTargetEmail(): void
     {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-03-01T00:00:00Z', null),
-        ]);
-        $mailer = new FakeReminderMailer();
+        $customer = $this->customer(1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        $repo = new SchedulerRepository($customer);
+        $mailer = new SchedulerMailer();
+        $service = $this->service($repo, $mailer, 30);
 
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->process(new DateTimeImmutable('2026-03-31T00:00:00Z'));
+        $result = $service->process(new DateTimeImmutable('2026-04-01T00:00:00Z'));
+
+        self::assertSame(1, $result->transitions);
+        self::assertSame(2, $customer->subscription()->status()->id());
+        self::assertSame(1, $mailer->sendCount);
+        self::assertSame('2026-04-01T00:00:00+00:00', $customer->subscription()->reminderSent()?->format(DATE_ATOM));
+    }
+
+    public function testRepeatedRunDoesNotDuplicateTransitionOrEmail(): void
+    {
+        $customer = $this->customer(2, '2026-01-01T00:00:00Z', '2026-04-01T00:00:00Z');
+        $repo = new SchedulerRepository($customer);
+        $mailer = new SchedulerMailer();
+        $service = $this->service($repo, $mailer, 30);
+
+        $first = $service->process(new DateTimeImmutable('2026-04-02T00:00:00Z'));
+        $second = $service->process(new DateTimeImmutable('2026-04-02T01:00:00Z'));
+
+        self::assertSame(1, $first->deliveryRetries);
+        self::assertSame(0, $second->deliveryRetries);
+        self::assertSame(1, $mailer->sendCount);
+    }
+
+    public function testLongOutageDoesNotSkipIntermediateState(): void
+    {
+        $customer = $this->customer(1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        $service = $this->service(new SchedulerRepository($customer), new SchedulerMailer(), 365);
+
+        $service->process(new DateTimeImmutable('2026-06-01T00:00:00Z'));
+        self::assertSame(2, $customer->subscription()->status()->id());
+
+        $service->process(new DateTimeImmutable('2026-06-08T00:00:00Z'));
+        self::assertSame(3, $customer->subscription()->status()->id());
+    }
+
+    public function testSmtpFailureReleasesClaimAndRetriesOnNextRun(): void
+    {
+        $customer = $this->customer(2, '2026-01-01T00:00:00Z', '2026-04-01T00:00:00Z');
+        $repo = new SchedulerRepository($customer);
+        $mailer = new SchedulerMailer();
+        $mailer->exception = new RuntimeException('SMTP unavailable');
+        $service = $this->service($repo, $mailer, 30);
+
+        $failed = $service->process(new DateTimeImmutable('2026-04-02T00:00:00Z'));
+        self::assertSame(1, $failed->smtpFailures);
+        self::assertTrue($repo->released);
+        self::assertNull($customer->subscription()->reminderSent());
+
+        $mailer->exception = null;
+        $service->process(new DateTimeImmutable('2026-04-03T00:00:00Z'));
+        self::assertSame(2, $mailer->sendCount);
+        self::assertNotNull($customer->subscription()->reminderSent());
+    }
+
+    public function testExpiredClaimCanBeReclaimedAfterCrash(): void
+    {
+        $customer = $this->customer(2, '2026-01-01T00:00:00Z', '2026-04-01T00:00:00Z');
+        $repo = new SchedulerRepository($customer);
+        $repo->claimedAt = new DateTimeImmutable('2026-04-02T00:00:00Z');
+        $mailer = new SchedulerMailer();
+
+        $result = $this->service($repo, $mailer, 30)
+            ->process(new DateTimeImmutable('2026-04-03T02:00:00Z'));
+
+        self::assertSame(1, $result->sent);
+        self::assertTrue($repo->claimed);
+    }
+
+    public function testActiveClaimBlocksASecondSender(): void
+    {
+        $customer = $this->customer(2, '2026-01-01T00:00:00Z', '2026-04-01T00:00:00Z');
+        $repo = new SchedulerRepository($customer);
+        $repo->claimedAt = new DateTimeImmutable('2026-04-02T00:30:00Z');
+        $mailer = new SchedulerMailer();
+
+        $result = $this->service($repo, $mailer, 30)
+            ->process(new DateTimeImmutable('2026-04-02T01:00:00Z'));
 
         self::assertSame(0, $result->sent);
         self::assertSame(0, $mailer->sendCount);
     }
 
-    public function testSendsOnceWhenDue(): void
+    public function testLatestSendDeadlineStopsAutomaticDeliveryButKeepsTransition(): void
     {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-01-01T00:00:00Z', null),
-        ]);
-        $mailer = new FakeReminderMailer();
-
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->process(new DateTimeImmutable('2026-04-01T00:00:00Z'));
-
-        self::assertSame(1, $result->sent);
-        self::assertSame(1, $mailer->sendCount);
-    }
-
-    public function testSendsAutomaticMessageAtLatestAllowedMoment(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-01-01T00:00:00Z', null),
-        ]);
-        $mailer = new FakeReminderMailer();
-
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger(), 30))
+        $customer = $this->customer(1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        $mailer = new SchedulerMailer();
+        $result = $this->service(new SchedulerRepository($customer), $mailer, 0)
             ->process(new DateTimeImmutable('2026-05-01T00:00:00Z'));
 
-        self::assertSame(1, $result->sent);
-        self::assertSame(0, $result->latestSendSkipped);
-        self::assertSame(1, $mailer->sendCount);
-    }
-
-    public function testSkipsAutomaticMessageAfterLatestAllowedMoment(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-01-01T00:00:00Z', null),
-        ]);
-        $mailer = new FakeReminderMailer();
-
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger(), 30))
-            ->process(new DateTimeImmutable('2026-05-01T00:00:01Z'));
-
-        self::assertSame(0, $result->sent);
+        self::assertSame(1, $result->transitions);
         self::assertSame(1, $result->latestSendSkipped);
         self::assertSame(0, $mailer->sendCount);
-        self::assertFalse($repo->claimCalled);
+        self::assertSame(2, $customer->subscription()->status()->id());
     }
 
-    public function testManualMessageIsNotRestrictedByLatestAutomaticSendLimit(): void
+    private function service(SchedulerRepository $repository, SchedulerMailer $mailer, int $latestDays): ReminderService
     {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-01-01T00:00:00Z', null),
-        ]);
-        $mailer = new FakeReminderMailer();
-
-        $sentAt = (new ReminderService($repo, $mailer, new FakeReminderLogger(), 0))
-            ->sendManually(7, new DateTimeImmutable('2027-01-01T00:00:00Z'));
-
-        self::assertNotNull($sentAt);
-        self::assertSame(1, $mailer->sendCount);
-    }
-
-    public function testDoesNotSendWhenAlreadyMarked(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(
-                3,
-                '2026-01-01T00:00:00Z',
-                new DateTimeImmutable('2026-04-01T00:00:00Z'),
-            ),
-        ]);
-        $mailer = new FakeReminderMailer();
-
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->process(new DateTimeImmutable('2026-04-02T00:00:00Z'));
-
-        self::assertSame(0, $result->sent);
-        self::assertSame(0, $mailer->sendCount);
-    }
-
-    public function testFailedInitialClaimDoesNotSend(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-01-01T00:00:00Z', null),
-        ]);
-        $repo->claimResult = false;
-        $mailer = new FakeReminderMailer();
-
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->process(new DateTimeImmutable('2026-04-01T00:00:00Z'));
-
-        self::assertSame(0, $result->sent);
-        self::assertSame(0, $mailer->sendCount);
-    }
-
-    public function testSmtpExceptionClearsClaim(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-01-01T00:00:00Z', null),
-        ]);
-        $mailer = new FakeReminderMailer();
-        $mailer->exception = new RuntimeException('SMTP unavailable');
-
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->process(new DateTimeImmutable('2026-04-01T00:00:00Z'));
-
-        self::assertSame(0, $result->sent);
-        self::assertSame(1, $repo->clearCount);
-        self::assertSame(1, $result->smtpFailures);
-    }
-
-    public function testSmtpExceptionAndFailedResetIsReported(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-01-01T00:00:00Z', null),
-        ]);
-        $repo->clearResult = false;
-        $mailer = new FakeReminderMailer();
-        $mailer->exception = new RuntimeException('SMTP unavailable');
-        $logger = new FakeReminderLogger();
-
-        $result = (new ReminderService($repo, $mailer, $logger))
-            ->process(new DateTimeImmutable('2026-04-01T00:00:00Z'));
-
-        self::assertSame(1, $result->resetFailures);
-        self::assertGreaterThan(0, $logger->count);
-    }
-
-    public function testManualReminderSendsBeforeExpiryWhenNoPreviousReminderExists(): void
-    {
-        $customer = $this->customer(12, '2026-03-01T00:00:00Z', null);
-        $repo = new FakeReminderRepository([$customer]);
-        $mailer = new FakeReminderMailer();
-        $sentAt = new DateTimeImmutable('2026-03-20T12:00:00Z');
-
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->sendManually(7, $sentAt);
-
-        self::assertNotNull($result);
-        self::assertSame($sentAt->format(DATE_ATOM), $result->format(DATE_ATOM));
-        self::assertSame(1, $mailer->sendCount);
-        self::assertNull($repo->expectedPreviousSentAt);
-        self::assertSame($sentAt->format(DATE_ATOM), $repo->claimedAt?->format(DATE_ATOM));
-    }
-
-    public function testAuthorisedRepeatedReminderOnlyResetsReminderSent(): void
-    {
-        $previousSent = new DateTimeImmutable('2026-03-15T00:00:00Z');
-        $customer = $this->customer(12, '2026-03-01T00:00:00Z', $previousSent);
-        $repo = new FakeReminderRepository([$customer]);
-        $mailer = new FakeReminderMailer();
-
-        $result = (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-            ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'), true);
-
-        self::assertNull($result);
-        self::assertSame(1, $repo->clearCount);
-        self::assertNull($customer->subscription()->reminderSent());
-        self::assertSame(0, $mailer->sendCount);
-    }
-
-    public function testRepeatedReminderResetRequiresAuthorisation(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(12, '2026-03-01T00:00:00Z', new DateTimeImmutable('2026-03-15T00:00:00Z')),
-        ]);
-        $mailer = new FakeReminderMailer();
-
-        $this->expectException(ReminderAuthorizationRequired::class);
-        try {
-            (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-                ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'));
-        } finally {
-            self::assertSame(0, $mailer->sendCount);
-            self::assertSame(0, $repo->clearCount);
-        }
-    }
-
-    public function testManualReminderDoesNotSendIfAtomicUpdateLosesRace(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(3, '2026-01-01T00:00:00Z', null),
-        ]);
-        $repo->manualClaimResult = false;
-        $mailer = new FakeReminderMailer();
-
-        $this->expectException(ReminderClaimConflict::class);
-        try {
-            (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-                ->sendManually(7, new DateTimeImmutable('2026-02-01T00:00:00Z'));
-        } finally {
-            self::assertSame(0, $mailer->sendCount);
-        }
-    }
-
-    public function testManualSmtpFailureRestoresNullReminderDate(): void
-    {
-        $repo = new FakeReminderRepository([
-            $this->customer(12, '2026-03-01T00:00:00Z', null),
-        ]);
-        $mailer = new FakeReminderMailer();
-        $mailer->exception = new RuntimeException('SMTP unavailable');
-
-        $this->expectException(ReminderDeliveryFailed::class);
-        try {
-            (new ReminderService($repo, $mailer, new FakeReminderLogger()))
-                ->sendManually(7, new DateTimeImmutable('2026-03-20T12:00:00Z'));
-        } finally {
-            self::assertNull($repo->restoredSentAt);
-        }
-    }
-
-    /** @return Customer */
-    private function customer(
-        int $duration,
-        string $start,
-        ?DateTimeImmutable $sentAt,
-    ): Customer {
-        $subscription = Subscription::reconstitute(
-            42,
-            match ($duration) {
-                3 => 1,
-                6 => 2,
-                12 => 3,
-                default => throw new \InvalidArgumentException('Unsupported duration'),
-            },
-            $duration,
-            new DateTimeImmutable($start),
-            $sentAt,
+        return new ReminderService(
+            $repository,
+            $mailer,
+            new SchedulerLogger(),
+            $latestDays,
+            new SchedulerStatusRepository(),
         );
+    }
+
+    private function customer(int $statusId, string $start, string $changed): Customer
+    {
+        $statuses = new SchedulerStatusRepository();
         return Customer::reconstitute(
             7,
             'Ada Lovelace',
             'ada@example.com',
-            $subscription,
+            Subscription::reconstitute(
+                42,
+                1,
+                '3 MONTHS',
+                new DateTimeImmutable($start),
+                null,
+                $statuses->findById($statusId),
+                new DateTimeImmutable($changed),
+            ),
         );
     }
 }
 
-final class FakeReminderRepository implements CustomerRepository
+final class SchedulerStatusRepository implements SubscriptionStatusRepository
 {
-    public bool $claimResult = true;
-    public bool $clearResult = true;
-    public bool $manualClaimResult = true;
-    public int $clearCount = 0;
-    public ?DateTimeImmutable $expectedPreviousSentAt = null;
-    public ?DateTimeImmutable $claimedAt = null;
-    public ?DateTimeImmutable $restoredSentAt = null;
-    public bool $claimCalled = false;
+    /** @var list<SubscriptionStatus> */
+    private array $statuses;
 
-    /** @param list<Customer> $customers */
-    public function __construct(private array $customers)
+    public function __construct()
+    {
+        $this->statuses = [
+            new SubscriptionStatus(1, 'Bezahlt', null, null, null),
+            new SubscriptionStatus(2, 'Fällig', '0 DAYS', 'Erinnerung', 'Hallo {{customer_name}}'),
+            new SubscriptionStatus(3, 'Säumig', '7 DAYS', 'Mahnung', 'Mahnung {{customer_name}}'),
+            new SubscriptionStatus(4, 'Beendet', '7 DAYS', 'Beendigung', 'Ende {{customer_name}}'),
+        ];
+    }
+
+    public function all(): array
+    {
+        return $this->statuses;
+    }
+
+    public function findById(int $id): ?SubscriptionStatus
+    {
+        return $this->statuses[$id - 1] ?? null;
+    }
+}
+
+final class SchedulerRepository implements CustomerRepository
+{
+    public ?DateTimeImmutable $claimedAt = null;
+    public bool $claimed = false;
+    public bool $released = false;
+
+    public function __construct(private readonly Customer $customer)
     {
     }
 
@@ -292,17 +194,12 @@ final class FakeReminderRepository implements CustomerRepository
 
     public function findById(int $id): ?Customer
     {
-        foreach ($this->customers as $customer) {
-            if ($customer->id() === $id) {
-                return $customer;
-            }
-        }
-        return null;
+        return $id === $this->customer->id() ? $this->customer : null;
     }
 
     public function all(): array
     {
-        return $this->customers;
+        return [$this->customer];
     }
 
     public function delete(int $id): bool
@@ -318,41 +215,42 @@ final class FakeReminderRepository implements CustomerRepository
         return true;
     }
 
-    public function tryClaimReminder(int $subscriptionId, DateTimeImmutable $sentAt): bool
-    {
-        $this->claimCalled = true;
-        return $this->claimResult;
-    }
-
-    public function clearReminderSent(int $subscriptionId, DateTimeImmutable $sentAt): bool
-    {
-        $this->clearCount++;
-        return $this->clearResult;
-    }
-
-    public function trySetReminderSent(
+    public function claimEmailDelivery(
         int $subscriptionId,
-        ?DateTimeImmutable $expectedSentAt,
-        DateTimeImmutable $sentAt,
-        ?int $expectedStatusId = null,
-    ): bool {
-        $this->expectedPreviousSentAt = $expectedSentAt;
-        $this->claimedAt = $sentAt;
-        return $this->manualClaimResult;
-    }
-
-    public function restoreReminderSent(
-        int $subscriptionId,
+        int $expectedStatusId,
         DateTimeImmutable $claimedAt,
-        ?DateTimeImmutable $previousSentAt,
-        ?int $expectedStatusId = null,
+        DateTimeImmutable $staleBefore,
     ): bool {
-        $this->restoredSentAt = $previousSentAt;
-        return $this->clearResult;
+        if ($this->claimedAt !== null && $this->claimedAt > $staleBefore) {
+            return false;
+        }
+        $this->claimedAt = $claimedAt;
+        $this->claimed = true;
+        return true;
+    }
+
+    public function markEmailDelivered(
+        int $subscriptionId,
+        int $expectedStatusId,
+        DateTimeImmutable $claimedAt,
+        DateTimeImmutable $sentAt,
+    ): bool {
+        $this->claimedAt = null;
+        return true;
+    }
+
+    public function releaseEmailClaim(
+        int $subscriptionId,
+        int $expectedStatusId,
+        DateTimeImmutable $claimedAt,
+    ): bool {
+        $this->claimedAt = null;
+        $this->released = true;
+        return true;
     }
 }
 
-final class FakeReminderMailer implements ReminderMailer
+final class SchedulerMailer implements ReminderMailer
 {
     public int $sendCount = 0;
     public ?\Throwable $exception = null;
@@ -366,12 +264,9 @@ final class FakeReminderMailer implements ReminderMailer
     }
 }
 
-final class FakeReminderLogger implements ReminderLogger
+final class SchedulerLogger implements ReminderLogger
 {
-    public int $count = 0;
-
     public function error(string $message, ?\Throwable $exception = null): void
     {
-        $this->count++;
     }
 }

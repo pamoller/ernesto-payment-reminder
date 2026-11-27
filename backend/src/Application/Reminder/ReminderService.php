@@ -5,19 +5,25 @@ declare(strict_types=1);
 namespace App\Application\Reminder;
 
 use App\Domain\Customer\CustomerRepository;
+use App\Domain\Customer\SubscriptionStatusRepository;
+use App\Domain\Customer\SubscriptionStatus;
 use DateTimeImmutable;
-use DateTimeZone;
-use OutOfBoundsException;
 use Throwable;
 
 final class ReminderService
 {
+    private const CLAIM_LIFETIME_MINUTES = 60;
+
     public function __construct(
         private readonly CustomerRepository $customers,
         private readonly ReminderMailer $mailer,
         private readonly ReminderLogger $logger,
-        private readonly ?int $messageLatestSendDays = null,
+        private readonly int $messageLatestSendDays,
+        private readonly SubscriptionStatusRepository $statuses,
     ) {
+        if ($messageLatestSendDays < 0) {
+            throw new \InvalidArgumentException('Latest send days cannot be negative');
+        }
     }
 
     public function process(DateTimeImmutable $now): ReminderResult
@@ -27,43 +33,83 @@ final class ReminderService
         $resetFailures = 0;
         $claimFailures = 0;
         $latestSendSkipped = 0;
+        $transitions = 0;
+        $transitionConflicts = 0;
+        $deliveryRetries = 0;
+        $statusDefinitions = $this->statuses->all();
+        $staleBefore = $now->modify('-' . self::CLAIM_LIFETIME_MINUTES . ' minutes');
 
         foreach ($this->customers->all() as $customer) {
             $subscription = $customer->subscription();
-            if (!$subscription->isReminderDue($now)) {
-                continue;
-            }
-            if ($this->messageLatestSendDays !== null
-                && !$subscription->canSendAutomaticMessageAt($now, $this->messageLatestSendDays)) {
-                $latestSendSkipped++;
-                continue;
-            }
-
             $subscriptionId = $subscription->id();
             if ($subscriptionId === null) {
                 continue;
             }
 
+            $target = $subscription->nextAutomaticStatus($statusDefinitions);
+            $transitionAt = $subscription->nextAutomaticTransitionAt($statusDefinitions);
+            if ($target !== null && $transitionAt !== null && $now >= $transitionAt) {
+                $expectedStatusId = $subscription->status()->id();
+                $expectedChangedAt = $subscription->statusChangedAt();
+                $subscription->transitionTo($target, $now);
+                try {
+                    if (!$this->customers->trySaveSubscriptionState(
+                        $subscription,
+                        $expectedStatusId,
+                        $expectedChangedAt,
+                    )) {
+                        $transitionConflicts++;
+                        continue;
+                    }
+                } catch (Throwable $exception) {
+                    $claimFailures++;
+                    $this->logger->error(
+                        'Failed to persist subscription status transition ' . $subscriptionId,
+                        $exception,
+                    );
+                    continue;
+                }
+                $transitions++;
+            } elseif ($subscription->status()->id() === 1 || $subscription->reminderSent() !== null) {
+                continue;
+            } else {
+                $deliveryRetries++;
+            }
+
+            if (!$this->hasEmail($subscription->status())) {
+                continue;
+            }
+            if (!$subscription->canSendAutomaticMessageAt($now, $this->messageLatestSendDays)) {
+                $latestSendSkipped++;
+                continue;
+            }
+
+            $statusId = $subscription->status()->id();
             $claimedAt = $now;
             try {
-                $claimed = $this->customers->tryClaimReminder($subscriptionId, $claimedAt);
-            } catch (Throwable $exception) {
-                $claimFailures++;
-                $this->logger->error(
-                    'Failed to claim reminder for subscription ' . $subscriptionId,
-                    $exception,
-                );
-                continue;
-            }
-
-            if (!$claimed) {
-                continue;
-            }
-
-            $subscription->markReminderSent($claimedAt);
-
-            try {
+                if (!$this->customers->claimEmailDelivery(
+                    $subscriptionId,
+                    $statusId,
+                    $claimedAt,
+                    $staleBefore,
+                )) {
+                    continue;
+                }
                 $this->mailer->send($customer);
+                if (!$this->customers->markEmailDelivered(
+                    $subscriptionId,
+                    $statusId,
+                    $claimedAt,
+                    $claimedAt,
+                )) {
+                    $resetFailures++;
+                    $this->logger->error(
+                        'Email was sent but its delivery state could not be committed for subscription '
+                        . $subscriptionId,
+                    );
+                    continue;
+                }
+                $subscription->markReminderSent($claimedAt);
                 $sent++;
             } catch (Throwable $exception) {
                 $smtpFailures++;
@@ -73,21 +119,21 @@ final class ReminderService
                 );
 
                 try {
-                    $cleared = $this->customers->clearReminderSent($subscriptionId, $claimedAt);
-                    if (!$cleared) {
+                    if (!$this->customers->releaseEmailClaim(
+                        $subscriptionId,
+                        $statusId,
+                        $claimedAt,
+                    )) {
                         $resetFailures++;
                         $this->logger->error(
-                            'Failed to reset reminder_sent for subscription ' . $subscriptionId
-                            . ' after SMTP failure',
+                            'Failed to release email claim for subscription ' . $subscriptionId,
                             $exception,
                         );
-                    } else {
-                        $subscription->clearReminderSent();
                     }
                 } catch (Throwable $resetException) {
                     $resetFailures++;
                     $this->logger->error(
-                        'Exception while resetting reminder_sent for subscription ' . $subscriptionId,
+                        'Exception while releasing email claim for subscription ' . $subscriptionId,
                         $resetException,
                     );
                 }
@@ -100,92 +146,14 @@ final class ReminderService
             $resetFailures,
             $claimFailures,
             $latestSendSkipped,
+            $transitions,
+            $transitionConflicts,
+            $deliveryRetries,
         );
     }
 
-    public function sendManually(
-        int $customerId,
-        DateTimeImmutable $now,
-        bool $authoriseRepeatedReminder = false,
-    ): ?DateTimeImmutable
+    private function hasEmail(SubscriptionStatus $status): bool
     {
-        $customer = $this->customers->findById($customerId);
-        if ($customer === null) {
-            throw new OutOfBoundsException('Customer not found');
-        }
-
-        $subscription = $customer->subscription();
-        $subscriptionId = $subscription->id();
-        if ($subscriptionId === null) {
-            throw new \LogicException('Cannot send a reminder for an unsaved subscription');
-        }
-        $previousSentAt = $subscription->reminderSent();
-        if ($previousSentAt !== null) {
-            if (!$authoriseRepeatedReminder) {
-                throw new ReminderAuthorizationRequired(
-                    'Das Zurücksetzen des Erinnerungsstatus erfordert eine ausdrückliche Autorisierung',
-                );
-            }
-            if (!$this->customers->clearReminderSent($subscriptionId, $previousSentAt)) {
-                throw new ReminderClaimConflict('Reminder state changed; reload and try again');
-            }
-            $subscription->clearReminderSent();
-            return null;
-        }
-
-        $sentAt = $now->setTimezone(new DateTimeZone('UTC'));
-        if (!$this->customers->trySetReminderSent($subscriptionId, null, $sentAt)) {
-            throw new ReminderClaimConflict('Reminder state changed; reload and try again');
-        }
-
-        $subscription->markReminderSent($sentAt);
-        try {
-            $this->mailer->send($customer);
-        } catch (Throwable $exception) {
-            $this->logger->error(
-                'Manual SMTP reminder failed for customer ' . $customerId,
-                $exception,
-            );
-
-            try {
-                $restored = $this->customers->restoreReminderSent(
-                    $subscriptionId,
-                    $sentAt,
-                    $previousSentAt,
-                );
-                if (!$restored) {
-                    $this->logger->error(
-                        'Failed to restore reminder_sent after manual SMTP failure for subscription '
-                        . $subscriptionId,
-                        $exception,
-                    );
-                    throw new ReminderDeliveryFailed(
-                        'Reminder failed and previous reminder status could not be restored',
-                        $exception,
-                    );
-                }
-            } catch (ReminderDeliveryFailed $resetFailure) {
-                throw $resetFailure;
-            } catch (Throwable $resetException) {
-                $this->logger->error(
-                    'Exception while restoring reminder_sent for subscription ' . $subscriptionId,
-                    $resetException,
-                );
-                throw new ReminderDeliveryFailed(
-                    'Reminder failed and previous reminder status could not be restored',
-                    $resetException,
-                );
-            }
-
-            if ($previousSentAt === null) {
-                $subscription->clearReminderSent();
-            } else {
-                $subscription->markReminderSent($previousSentAt);
-            }
-
-            throw new ReminderDeliveryFailed('Reminder email could not be sent', $exception);
-        }
-
-        return $sentAt;
+        return $status->subject() !== null || $status->message() !== null;
     }
 }

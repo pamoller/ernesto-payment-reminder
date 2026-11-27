@@ -2,6 +2,7 @@
 set -euo pipefail
 
 base_url="${API_BASE_URL:-http://127.0.0.1:8080}"
+api_test_email="api-test-$$@example.invalid"
 
 auth_test_username="${AUTH_TEST_USERNAME:-}"
 auth_test_password="${AUTH_TEST_PASSWORD:-}"
@@ -71,7 +72,7 @@ create_status="$(curl -sS -o /tmp/ernesto-customer.json -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: $csrf_token" \
-  -d "{\"name\":\"API Test Customer\",\"email\":\"api-test@example.invalid\",\"subscription_type_id\":$subscription_type_3_id,\"start_date\":\"2026-01-01\"}" \
+  -d "{\"name\":\"API Test Customer\",\"email\":\"$api_test_email\",\"subscription_type_id\":$subscription_type_3_id,\"start_date\":\"2026-01-01\"}" \
   "$base_url/api/customers")"
 require_status customer-create 201 "$create_status"
 
@@ -92,10 +93,10 @@ update_status="$(curl -sS -o /tmp/ernesto-customer-updated.json -w '%{http_code}
   -X PUT \
   -H 'Content-Type: application/json' \
   -H "X-CSRF-Token: $csrf_token" \
-  -d "{\"name\":\"API Test Updated\",\"email\":\"api-test@example.invalid\",\"subscription_type_id\":$subscription_type_12_id,\"subscription_status_id\":1,\"start_date\":\"2026-02-01\"}" \
+  -d "{\"name\":\"API Test Updated\",\"email\":\"$api_test_email\",\"subscription_type_id\":$subscription_type_12_id,\"subscription_status_id\":1,\"start_date\":\"2026-02-01\"}" \
   "$base_url/api/customers/$customer_id")"
 require_status customer-update 200 "$update_status"
-php -r '$body=json_decode(file_get_contents("/tmp/ernesto-customer-updated.json"), true, 512, JSON_THROW_ON_ERROR); exit(($body["customer"]["subscription_status_id"] ?? null) === 1 && ($body["customer"]["reminder_sent"] ?? "not-null") === null ? 0 : 1);'
+php -r '$body=json_decode(file_get_contents("/tmp/ernesto-customer-updated.json"), true, 512, JSON_THROW_ON_ERROR); exit(($body["customer"]["subscription_status_id"] ?? null) === 1 && array_key_exists("reminder_sent", $body["customer"]) && $body["customer"]["reminder_sent"] === null ? 0 : 1);'
 
 delete_status="$(curl -sS -o /dev/null -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt \

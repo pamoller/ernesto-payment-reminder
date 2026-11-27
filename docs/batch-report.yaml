@@ -1,94 +1,137 @@
-batch_id: "STATE-SLICE-02"
-completed_tasks: ["TS004"]
+batch_id: "STATE-FINAL-HARDENING"
+completed_tasks: ["TS005", "TS006"]
 blocked_tasks: []
 files_changed:
-  TS004:
+  TS005:
+    - file: "backend/src/Application/Reminder/ReminderService.php"
+      change_type: "modified"
+      description: "Runs one automatic state transition per subscription and retries unsent state email"
+    - file: "backend/src/Application/Reminder/ReminderResult.php"
+      change_type: "modified"
+      description: "Reports transitions, conflicts, retries and skipped late deliveries"
+    - file: "backend/bin/run-reminders.php"
+      change_type: "modified"
+      description: "Loads state definitions and validated MESSAGE_LATEST_SEND"
+    - file: "backend/tests/Application/Reminder/ReminderServiceTest.php"
+      change_type: "modified"
+      description: "Covers transitions, repeated runs, outage recovery and delivery deadlines"
+  TS006:
     - file: "backend/src/Application/Customer/SubscriptionLifecycleService.php"
-      change_type: "created"
-      description: "Coordinates payment, reactivation, administrative state changes and resend"
-    - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
       change_type: "modified"
-      description: "Adds conditional state and state-bound delivery persistence"
-    - file: "backend/src/Infrastructure/Reminder/ReminderTemplate.php"
-      change_type: "modified"
-      description: "Renders database status templates and rejects unknown placeholders"
+      description: "Reduced lifecycle service to current-status resend"
     - file: "backend/src/Infrastructure/Http/SubscriptionLifecycleController.php"
-      change_type: "created"
-      description: "Adds protected lifecycle REST actions"
-    - file: "frontend/src/components/SubscriptionDetailView.vue"
       change_type: "modified"
-      description: "Adds confirmed administrative and resend actions plus payment/reactivation"
+      description: "Removed unused payment and reactivation endpoints"
+    - file: "contracts/openapi.yaml"
+      change_type: "modified"
+      description: "Aligned routes with the actual simplified API"
+    - file: "api-test.sh"
+      change_type: "modified"
+      description: "Made smoke data repeatable and verified status persistence"
+  TS007:
+    - file: "backend/migrations/009_add_reminder_claim.sql"
+      change_type: "created"
+      description: "Added recoverable status-bound delivery claim"
+    - file: "backend/src/Application/Common/Clock.php"
+      change_type: "created"
+      description: "Added testable application clock"
+    - file: "backend/src/Application/Customer/CustomerMapper.php"
+      change_type: "created"
+      description: "Separated API mapping from application use cases"
 upstream_artifacts_consumed:
-  TS004:
-    - artifact: "docs/state-machine-plan.md#7-10"
-      used_for: "Lifecycle actions, status email semantics, persistence and API"
+  TS005:
+    - artifact: "docs/state-machine-plan.md#5,9"
+      used_for: "Automatic transition dates, one-step limit and scheduler orchestration"
+  TS006:
+    - artifact: "user operational constraint"
+      used_for: "Single daytime administrator and nightly scheduler simplification"
 evidence_mapping:
-  TS004:
-    - upstream: "docs/state-machine-plan.md#7"
-      output: "backend/src/Application/Customer/SubscriptionLifecycleService.php"
-      evidence: "Payment, reactivation and invalid transition service tests"
+  TS005:
+    - upstream: "docs/state-machine-plan.md#5"
+      output: "backend/src/Application/Reminder/ReminderService.php"
+      evidence: "Scheduler tests cover one-step outage behavior and repeat execution"
     - upstream: "docs/state-machine-plan.md#8"
-      output: "backend/src/Infrastructure/Reminder/ReminderTemplate.php"
-      evidence: "Rendering and unknown-placeholder tests"
+      output: "backend/src/Application/Reminder/ReminderService.php"
+      evidence: "SMTP failure leaves state persisted and schedules resend"
+  TS006:
+    - upstream: "user operational constraint"
+      output: "backend/src/Infrastructure/Http/SubscriptionLifecycleController.php"
+      evidence: "Only resend and active CRUD/renew routes remain"
 traceability:
-  - requirement: "REQ-STATE-ACTIONS"
-    plan_item: "7-10"
-    task: "TS004"
+  - requirement: "REQ-AUTOMATIC-STATE"
+    plan_item: "5, 9"
+    task: "TS005"
+    files: ["backend/src/Application/Reminder/ReminderService.php", "backend/bin/run-reminders.php"]
+    status: "completed"
+  - requirement: "REQ-FINAL-HARDENING"
+    plan_item: "12"
+    task: "TS006"
+    files: ["backend/src/Application/Customer/SubscriptionLifecycleService.php", "contracts/openapi.yaml"]
+    status: "completed"
+  - requirement: "REQ-CLAIM-RECOVERY"
+    plan_item: "Maintenance 3-6"
+    task: "TS007"
     files:
-      - "backend/src/Application/Customer/SubscriptionLifecycleService.php"
-      - "backend/src/Infrastructure/Http/SubscriptionLifecycleController.php"
-      - "frontend/src/components/SubscriptionDetailView.vue"
+      - "backend/migrations/009_add_reminder_claim.sql"
+      - "backend/src/Application/Reminder/ReminderService.php"
+      - "backend/src/Application/Common/Clock.php"
     status: "completed"
 protocol_violation: false
 errors: []
 warnings:
   - severity: "MEDIUM"
-    message: "Real SMTP delivery was not exercised with a customer; delivery failures are covered by tests"
+    message: "An SMTP process crash after server acceptance but before delivery-state commit can still produce a duplicate retry; expired claims make such cases recoverable"
   - severity: "MEDIUM"
-    message: "Persisting state and SMTP delivery cannot be atomic across database and external SMTP; the state remains authoritative and delivery failure is reported separately"
+    message: "Real SMTP delivery was not invoked; failure and restoration behavior is unit-tested"
+  - severity: "MEDIUM"
+    message: "Database state and SMTP remain separate side effects; a failed send is retried on a later cron run"
 required_endpoints:
   - method: "POST"
-    path: "/api/customers/{id}/payment"
-    source: "docs/state-machine-plan.md"
-    status: "implemented"
-  - method: "POST"
-    path: "/api/customers/{id}/reactivate"
-    source: "docs/state-machine-plan.md"
-    status: "implemented"
-  - method: "PUT"
-    path: "/api/customers/{id}/status"
-    source: "docs/state-machine-plan.md"
+    path: "/api/customers/{id}/renew"
+    source: "api-test.sh"
     status: "implemented"
   - method: "POST"
     path: "/api/customers/{id}/status-email"
-    source: "docs/state-machine-plan.md"
+    source: "frontend/src/components/SubscriptionDetailView.vue"
     status: "implemented"
 endpoint_probes:
+  - method: "GET"
+    path: "/api/health"
+    status: 200
+    result: "PASS"
+  - method: "GET"
+    path: "/api/subscription-statuses"
+    status: 200
+    result: "PASS"
+  - method: "POST"
+    path: "/api/customers"
+    status: 201
+    result: "PASS"
   - method: "PUT"
-    path: "/api/customers/{id}/status"
+    path: "/api/customers/{id}"
     status: 200
     result: "PASS"
 test_results:
-  TS004_BACKEND:
+  TS005_BACKEND:
     command: "cd backend && php vendor/bin/phpunit"
-    passed: 51
+    passed: 46
     failed: 0
     skipped: 0
     failures: []
-  TS004_FRONTEND:
+  TS006_FRONTEND:
     command: "cd frontend && npm test"
     passed: 7
     failed: 0
     skipped: 0
     failures: []
-  TS004_BUILD:
+  TS006_BUILD:
     command: "cd frontend && npm run build"
     passed: 1
     failed: 0
     skipped: 0
     failures: []
-  TS004_API:
-    command: "API_BASE_URL=http://127.0.0.1:8082 bash ./api-test.sh"
+  TS006_API:
+    command: "API_BASE_URL=http://127.0.0.1:8085 bash ./api-test.sh"
     passed: 1
     failed: 0
     skipped: 0

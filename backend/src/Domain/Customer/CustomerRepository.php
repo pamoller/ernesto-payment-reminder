@@ -21,21 +21,23 @@ interface CustomerRepository
         \DateTimeImmutable $expectedStatusChangedAt,
     ): bool;
 
-    public function tryClaimReminder(int $subscriptionId, \DateTimeImmutable $sentAt): bool;
-
-    public function clearReminderSent(int $subscriptionId, \DateTimeImmutable $sentAt): bool;
-
-    public function trySetReminderSent(
+    public function claimEmailDelivery(
         int $subscriptionId,
-        ?\DateTimeImmutable $expectedSentAt,
-        \DateTimeImmutable $sentAt,
-        ?int $expectedStatusId = null,
+        int $expectedStatusId,
+        \DateTimeImmutable $claimedAt,
+        \DateTimeImmutable $staleBefore,
     ): bool;
 
-    public function restoreReminderSent(
+    public function markEmailDelivered(
         int $subscriptionId,
+        int $expectedStatusId,
         \DateTimeImmutable $claimedAt,
-        ?\DateTimeImmutable $previousSentAt,
-        ?int $expectedStatusId = null,
+        \DateTimeImmutable $sentAt,
+    ): bool;
+
+    public function releaseEmailClaim(
+        int $subscriptionId,
+        int $expectedStatusId,
+        \DateTimeImmutable $claimedAt,
     ): bool;
 }

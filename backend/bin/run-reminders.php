@@ -7,6 +7,7 @@ use App\Application\Reminder\ReminderService;
 use App\Infrastructure\Database\PdoCustomerRepository;
 use App\Infrastructure\Database\PdoFactory;
 use App\Infrastructure\Reminder\PhpmailerReminderMailer;
+use App\Infrastructure\Database\PdoSubscriptionStatusRepository;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -34,7 +35,13 @@ $mailer = new PhpmailerReminderMailer(
     getenv('SMTP_SECURE') ?: 'tls',
 );
 
-$service = new ReminderService($repository, $mailer, $logger, (int) $latestSendValue);
+$service = new ReminderService(
+    $repository,
+    $mailer,
+    $logger,
+    (int) $latestSendValue,
+    new PdoSubscriptionStatusRepository($pdo),
+);
 
 try {
     $result = $service->process(new DateTimeImmutable('now', new DateTimeZone('UTC')));
@@ -44,6 +51,9 @@ try {
         'resetFailures' => $result->resetFailures,
         'claimFailures' => $result->claimFailures,
         'latestSendSkipped' => $result->latestSendSkipped,
+        'transitions' => $result->transitions,
+        'transitionConflicts' => $result->transitionConflicts,
+        'deliveryRetries' => $result->deliveryRetries,
     ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 
     exit(($result->smtpFailures > 0 || $result->resetFailures > 0 || $result->claimFailures > 0) ? 1 : 0);

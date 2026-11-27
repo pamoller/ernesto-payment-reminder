@@ -168,28 +168,6 @@ final class Subscription
         return true;
     }
 
-    public function registerPayment(SubscriptionStatus $paid, DateTimeImmutable $paidAt): bool
-    {
-        if (!in_array($this->status->id(), [2, 3], true)) {
-            throw new LogicException('Payment can only be registered for a due or overdue subscription');
-        }
-
-        $changed = $this->transitionTo($paid, $paidAt);
-        $this->startsAt = $paidAt->setTime(0, 0);
-        return $changed;
-    }
-
-    public function reactivate(SubscriptionStatus $paid, DateTimeImmutable $reactivatedAt): bool
-    {
-        if ($this->status->id() !== 4) {
-            throw new LogicException('Only an ended subscription can be reactivated');
-        }
-
-        $changed = $this->transitionTo($paid, $reactivatedAt);
-        $this->startsAt = $reactivatedAt->setTime(0, 0);
-        return $changed;
-    }
-
     public function setStatusAdministratively(SubscriptionStatus $target, DateTimeImmutable $changedAt): bool
     {
         if ($target->id() === $this->status->id()) {
@@ -224,19 +202,9 @@ final class Subscription
         return $now <= $this->latestAutomaticSendAt($days);
     }
 
-    public function isReminderDue(DateTimeImmutable $now): bool
-    {
-        return $this->reminderSent === null && $now >= $this->expiresAt();
-    }
-
     public function markReminderSent(DateTimeImmutable $sentAt): void
     {
         $this->reminderSent = $sentAt;
-    }
-
-    public function clearReminderSent(): void
-    {
-        $this->reminderSent = null;
     }
 
     /** @param array<int, SubscriptionStatus>|list<SubscriptionStatus> $statuses */

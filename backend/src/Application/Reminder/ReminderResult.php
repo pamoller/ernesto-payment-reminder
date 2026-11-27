@@ -12,6 +12,9 @@ final class ReminderResult
         public readonly int $resetFailures = 0,
         public readonly int $claimFailures = 0,
         public readonly int $latestSendSkipped = 0,
+        public readonly int $transitions = 0,
+        public readonly int $transitionConflicts = 0,
+        public readonly int $deliveryRetries = 0,
     ) {
     }
 }
