@@ -28,7 +28,18 @@ final class CustomerTest extends TestCase
     public function testRejectsInvalidDuration(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        Subscription::create(1, 4, new DateTimeImmutable('2026-01-01T00:00:00Z'));
+        Subscription::create(1, '1.5 DAYS', new DateTimeImmutable('2026-01-01T00:00:00Z'));
+    }
+
+    public function testSupportsDayBasedSubscriptionTypes(): void
+    {
+        $blackFriday = Subscription::create(1, '1 DAYS', new DateTimeImmutable('2026-11-27T00:00:00Z'));
+        $instant = Subscription::create(2, '0 DAYS', new DateTimeImmutable('2026-11-27T00:00:00Z'));
+
+        self::assertSame('2026-11-28', $blackFriday->expiresAt()->format('Y-m-d'));
+        self::assertSame('2026-11-27', $instant->expiresAt()->format('Y-m-d'));
+        self::assertNull($blackFriday->durationMonths());
+        self::assertSame('1 DAYS', $blackFriday->duration());
     }
 
     public function testRejectsInvalidEmail(): void

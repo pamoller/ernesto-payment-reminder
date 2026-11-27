@@ -126,7 +126,7 @@ final class CustomerService
         $type = $this->subscriptionType($input);
         $subscription = Subscription::create(
             $type->id,
-            $type->durationMonths(),
+            $type->duration,
             $this->startDate($input),
             $this->paidStatus(),
             new DateTimeImmutable('now', new \DateTimeZone('UTC')),
@@ -159,7 +159,7 @@ final class CustomerService
         $customer->changeSubscription(Subscription::reconstitute(
             (int) $existing->id(),
             $type->id,
-            $type->durationMonths(),
+            $type->duration,
             $this->startDate($input),
             $existing->reminderSent(),
             $existing->status(),
@@ -184,7 +184,7 @@ final class CustomerService
         $customer->changeSubscription(Subscription::reconstitute(
             (int) $existing->id(),
             $existing->subscriptionTypeId(),
-            $existing->durationMonths(),
+            $existing->duration(),
             $existing->expiresAt(),
             null,
             $existing->status(),
@@ -268,6 +268,7 @@ final class CustomerService
             'email' => $customer->email(),
             'subscription_type_id' => $subscription->subscriptionTypeId(),
             'duration_months' => $subscription->durationMonths(),
+            'duration' => $subscription->duration(),
             'start_date' => $subscription->startsAt()->format('Y-m-d'),
             'expires_at' => $subscription->expiresAt()->format('Y-m-d'),
             'reminder_sent' => $subscription->reminderSent()?->format('Y-m-d\TH:i:s.uP'),

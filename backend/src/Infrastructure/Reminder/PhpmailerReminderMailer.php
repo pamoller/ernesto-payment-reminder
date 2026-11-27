@@ -25,7 +25,7 @@ final class PhpmailerReminderMailer implements ReminderMailer
     public function send(Customer $customer): void
     {
         $template = ReminderTemplate::forDuration(
-            $customer->subscription()->durationMonths(),
+            $customer->subscription()->duration(),
             $customer->name(),
         );
 

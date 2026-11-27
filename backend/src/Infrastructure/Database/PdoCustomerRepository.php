@@ -224,7 +224,7 @@ final class PdoCustomerRepository implements CustomerRepository
         $subscription = Subscription::reconstitute(
             (int) $row['subscription_id'],
             (int) $row['subscription_type_id'],
-            SubscriptionType::durationMonthsFrom((string) $row['duration']),
+            (string) $row['duration'],
             new DateTimeImmutable((string) $row['starts_at'], new \DateTimeZone('UTC')),
             $reminderSent,
             new SubscriptionStatus(

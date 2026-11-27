@@ -15,7 +15,7 @@ final class Subscription
 
     private function __construct(
         private readonly int $subscriptionTypeId,
-        private readonly int $durationMonths,
+        private readonly string $duration,
         private readonly DateTimeImmutable $startsAt,
         ?DateTimeImmutable $reminderSent,
         private SubscriptionStatus $status,
@@ -25,15 +25,13 @@ final class Subscription
         if ($subscriptionTypeId < 1) {
             throw new InvalidArgumentException('Subscription type is required');
         }
-        if (!in_array($durationMonths, [3, 6, 12], true)) {
-            throw new InvalidArgumentException('Duration must be 3, 6 or 12 months');
-        }
+        Duration::fromString($duration);
         $this->reminderSent = $reminderSent;
     }
 
     public static function create(
         int $subscriptionTypeId,
-        int $durationMonths,
+        int|string $duration,
         DateTimeImmutable $startsAt,
         ?SubscriptionStatus $status = null,
         ?DateTimeImmutable $statusChangedAt = null,
@@ -41,7 +39,7 @@ final class Subscription
     {
         return new self(
             $subscriptionTypeId,
-            $durationMonths,
+            is_int($duration) ? $duration . ' MONTHS' : $duration,
             $startsAt,
             null,
             $status ?? SubscriptionStatus::paid(),
@@ -52,7 +50,7 @@ final class Subscription
     public static function reconstitute(
         int $id,
         int $subscriptionTypeId,
-        int $durationMonths,
+        int|string $duration,
         DateTimeImmutable $startsAt,
         ?DateTimeImmutable $reminderSent,
         ?SubscriptionStatus $status = null,
@@ -60,7 +58,7 @@ final class Subscription
     ): self {
         return new self(
             $subscriptionTypeId,
-            $durationMonths,
+            is_int($duration) ? $duration . ' MONTHS' : $duration,
             $startsAt,
             $reminderSent,
             $status ?? SubscriptionStatus::paid(),
@@ -84,9 +82,17 @@ final class Subscription
         $this->id = $id;
     }
 
-    public function durationMonths(): int
+    public function duration(): string
     {
-        return $this->durationMonths;
+        return $this->duration;
+    }
+
+    public function durationMonths(): ?int
+    {
+        if (preg_match('/^([0-9]+)\s+MONTHS?$/i', $this->duration, $matches) !== 1) {
+            return null;
+        }
+        return (int) $matches[1];
     }
 
     public function startsAt(): DateTimeImmutable
@@ -178,7 +184,7 @@ final class Subscription
 
     public function expiresAt(): DateTimeImmutable
     {
-        return $this->startsAt->modify('+' . $this->durationMonths . ' months');
+        return Duration::fromString($this->duration)->addTo($this->startsAt);
     }
 
     public function isReminderDue(DateTimeImmutable $now): bool

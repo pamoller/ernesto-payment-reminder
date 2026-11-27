@@ -84,6 +84,21 @@ function remainingDays(): number {
   return Math.ceil((new Date(`${customer.value.expires_at}T00:00:00`).getTime() - Date.now()) / 86400000)
 }
 
+function durationLabel(): string {
+  if (!customer.value) return ''
+  const duration = customer.value.duration
+    ?? types.value.find((type) => type.id === customer.value?.subscription_type_id)?.duration
+    ?? `${customer.value.duration_months ?? ''} months`
+  const match = /^(\d+) (DAY|DAYS|WEEK|WEEKS|MONTH|MONTHS|YEAR|YEARS)$/i.exec(duration)
+  if (!match) return duration
+  const amount = Number(match[1])
+  const unit = match[2].toUpperCase()
+  if (unit.startsWith('DAY')) return `${amount} ${amount === 1 ? 'Tag' : 'Tage'}`
+  if (unit.startsWith('WEEK')) return `${amount} ${amount === 1 ? 'Woche' : 'Wochen'}`
+  if (unit.startsWith('MONTH')) return `${amount} ${amount === 1 ? 'Monat' : 'Monate'}`
+  return `${amount} ${amount === 1 ? 'Jahr' : 'Jahre'}`
+}
+
 async function save(): Promise<void> {
   if (busy.value) return
   error.value = ''
@@ -294,7 +309,7 @@ onBeforeUnmount(() => {
       <div class="w-full max-w-md rounded border-2 border-ernesto-blue bg-ernesto-blue p-6 text-white">
         <h2 id="renew-title" class="text-xl font-bold text-white">Abonnement verlängern?</h2>
         <p class="mt-3">
-          Die Laufzeit von {{ customer?.duration_months }} Monaten beginnt am bisherigen Ablaufdatum
+          Die Laufzeit von {{ durationLabel() }} beginnt am bisherigen Ablaufdatum
           {{ customer ? formatDate(customer.expires_at) : '' }} neu. Der Erinnerungsstatus wird zurückgesetzt.
         </p>
         <div class="mt-5 flex flex-row flex-wrap justify-start gap-2">

@@ -98,21 +98,36 @@ async function confirmAction(): Promise<void> {
   }
 }
 
-function remainingDays(customer: Customer): number {
-  const today = new Date()
-  const end = new Date(`${customer.expires_at}T00:00:00`)
-  return Math.ceil((end.getTime() - today.getTime()) / 86400000)
+function remainingDays(customer: Customer): number | null {
+  if (!customer.next_subscription_status_at) return null
+  const transitionAt = new Date(customer.next_subscription_status_at)
+  return Math.ceil((transitionAt.getTime() - Date.now()) / 86400000)
 }
 
 function state(customer: Customer): 'expired' | 'soon' | 'active' {
   const remaining = remainingDays(customer)
-  if (remaining < 0) return 'expired'
+  if (remaining === null) return 'active'
+  if (remaining <= 0) return 'expired'
   if (remaining <= 7) return 'soon'
   return 'active'
 }
 
 function typeName(id: number): string {
   return types.value.find((type) => type.id === id)?.name ?? ''
+}
+
+function durationLabel(customer: Customer): string {
+  const duration = customer.duration
+    ?? types.value.find((type) => type.id === customer.subscription_type_id)?.duration
+    ?? `${customer.duration_months ?? ''} months`
+  const match = /^(\d+) (DAY|DAYS|WEEK|WEEKS|MONTH|MONTHS|YEAR|YEARS)$/i.exec(duration)
+  if (!match) return duration
+  const amount = Number(match[1])
+  const unit = match[2].toUpperCase()
+  if (unit.startsWith('DAY')) return `${amount} ${amount === 1 ? 'Tag' : 'Tage'}`
+  if (unit.startsWith('WEEK')) return `${amount} ${amount === 1 ? 'Woche' : 'Wochen'}`
+  if (unit.startsWith('MONTH')) return `${amount} ${amount === 1 ? 'Monat' : 'Monate'}`
+  return `${amount} ${amount === 1 ? 'Jahr' : 'Jahre'}`
 }
 
 function formatDate(value: string): string {
@@ -193,8 +208,8 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
                 {{ column[1] }}<span v-if="sort === column[0]" aria-label="Sortierreihenfolge">{{ direction === 'asc' ? ' ↑' : ' ↓' }}</span>
               </button>
             </th>
-            <th class="border-b border-ernesto-blue-dark px-3 py-3">Tage</th>
             <th class="border-b border-ernesto-blue-dark px-3 py-3">Status</th>
+            <th class="border-b border-ernesto-blue-dark px-3 py-3">Tage</th>
             <th class="border-b border-ernesto-blue-dark px-3 py-3">Erinnert am</th>
             <th class="border-b border-ernesto-blue-dark px-3 py-3">Aktionen</th>
           </tr>
@@ -215,17 +230,17 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
             <td class="px-3 py-3">{{ formatDate(customer.start_date) }}</td>
             <td class="px-3 py-3">{{ formatDate(customer.expires_at) }}</td>
             <td class="px-3 py-3">
-              <span :class="{
-                'text-red-700': state(customer) === 'expired',
-                'text-amber-700': state(customer) === 'soon',
-                'text-ernesto-blue': state(customer) === 'active'
-              }">{{ remainingDays(customer) }}</span>
-            </td>
-            <td class="px-3 py-3">
               <span
                 class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
                 :class="statusBadge(customer.subscription_status_id)"
               >{{ statusName(customer) }}</span>
+            </td>
+            <td class="px-3 py-3">
+              <span :class="{
+                'text-red-700': state(customer) === 'expired',
+                'text-amber-700': state(customer) === 'soon',
+                'text-ernesto-blue': state(customer) === 'active'
+              }">{{ remainingDays(customer) ?? '—' }}</span>
             </td>
             <td class="px-3 py-3">{{ formatTimestamp(customer.reminder_sent) }}</td>
             <td class="px-3 py-3" @click.stop>
@@ -262,7 +277,7 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
         </h2>
         <p class="mt-3">
           {{ pendingAction.customer.name }} wird ab dem bisherigen Ablaufdatum
-          {{ formatDate(pendingAction.customer.expires_at) }} um {{ pendingAction.customer.duration_months }} Monate verlängert.
+          {{ formatDate(pendingAction.customer.expires_at) }} um {{ durationLabel(pendingAction.customer) }} verlängert.
           Der Erinnerungsstatus wird zurückgesetzt.
         </p>
         <div class="mt-5 flex flex-row flex-wrap justify-start gap-2">

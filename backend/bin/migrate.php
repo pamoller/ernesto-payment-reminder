@@ -30,7 +30,9 @@ if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
         "INSERT OR IGNORE INTO subscription_type (name, duration, reminder) VALUES
             ('Skool Test', '3 MONTHS', 'Reminder Text 123'),
             ('Skool Halbjahres Abo', '6 MONTHS', 'Reminder Text 123'),
-            ('Skool Jahres Abo', '12 MONTHS', 'Reminder Text 123')"
+            ('Skool Jahres Abo', '12 MONTHS', 'Reminder Text 123'),
+            ('Skool Black Friday', '1 DAYS', 'Reminder Text 123'),
+            ('Skool Instant', '0 DAYS', 'Reminder Text 123')"
     );
     $pdo->exec(
         'CREATE UNIQUE INDEX IF NOT EXISTS uk_subscription_type_duration
@@ -101,9 +103,8 @@ if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
     );
     $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
     foreach ($pending->fetchAll() as $subscription) {
-        $months = App\Domain\Customer\SubscriptionType::durationMonthsFrom((string) $subscription['duration']);
         $startsAt = new DateTimeImmutable((string) $subscription['starts_at'], new DateTimeZone('UTC'));
-        $expiresAt = $startsAt->modify('+' . $months . ' months');
+        $expiresAt = App\Domain\Customer\Duration::fromString((string) $subscription['duration'])->addTo($startsAt);
         $isDue = $now >= $expiresAt;
         $changedAt = $isDue ? $expiresAt : $startsAt;
         $initializeStatus->execute([$isDue ? 2 : 1, $changedAt->format('Y-m-d H:i:s.u'), $subscription['id']]);

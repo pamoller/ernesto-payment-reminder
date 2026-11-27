@@ -17,6 +17,17 @@ function update(field: keyof typeof props.modelValue, event: Event): void {
   const value = field === 'subscription_type_id' ? Number(target.value) : target.value
   emit('update:modelValue', { ...props.modelValue, [field]: value })
 }
+
+function durationLabel(duration: string): string {
+  const match = /^(\d+) (DAY|DAYS|WEEK|WEEKS|MONTH|MONTHS|YEAR|YEARS)$/i.exec(duration)
+  if (!match) return duration
+  const amount = Number(match[1])
+  const unit = match[2].toUpperCase()
+  if (unit.startsWith('DAY')) return `${amount} ${amount === 1 ? 'Tag' : 'Tage'}`
+  if (unit.startsWith('WEEK')) return `${amount} ${amount === 1 ? 'Woche' : 'Wochen'}`
+  if (unit.startsWith('MONTH')) return `${amount} ${amount === 1 ? 'Monat' : 'Monate'}`
+  return `${amount} ${amount === 1 ? 'Jahr' : 'Jahre'}`
+}
 </script>
 
 <template>
@@ -33,7 +44,7 @@ function update(field: keyof typeof props.modelValue, event: Event): void {
       <label for="subscription_type_id" class="mb-1 block text-sm font-semibold text-slate-800">Abonnement</label>
       <select id="subscription_type_id" :value="modelValue.subscription_type_id" @change="update('subscription_type_id', $event)" required class="w-full rounded border border-slate-300 px-3 py-2">
         <option v-for="type in subscriptionTypes" :key="type.id" :value="type.id">
-          {{ type.name }} ({{ type.duration_months }} Monate)
+          {{ type.name }} ({{ durationLabel(type.duration) }})
         </option>
       </select>
     </div>
