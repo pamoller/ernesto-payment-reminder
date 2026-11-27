@@ -47,16 +47,35 @@ final class PdoCustomerRepositoryTest extends TestCase
                 (3, 'Skool Jahres Abo', '12 MONTHS', 'Reminder Text 123')"
         );
         $this->pdo->exec(
+            'CREATE TABLE subscription_status (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                duration TEXT NULL,
+                subject TEXT NULL,
+                message TEXT NULL
+            )'
+        );
+        $this->pdo->exec(
+            "INSERT INTO subscription_status (id, name, duration, subject, message) VALUES
+                (1, 'Bezahlt', NULL, NULL, NULL),
+                (2, 'Fällig', '0 DAYS', 'Zahlungserinnerung', 'Hallo'),
+                (3, 'Säumig', '7 DAYS', 'Mahnung', 'Mahnung'),
+                (4, 'Beendet', '7 DAYS', 'Beendigung', 'Ende')"
+        );
+        $this->pdo->exec(
             'CREATE TABLE subscriptions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 customer_id INTEGER NOT NULL UNIQUE,
                 subscription_type_id INTEGER NOT NULL,
+                subscription_status_id INTEGER NOT NULL,
+                subscription_status_changed TEXT NOT NULL,
                 starts_at TEXT NOT NULL,
                 reminder_sent TEXT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,
-                FOREIGN KEY(subscription_type_id) REFERENCES subscription_type(id)
+                FOREIGN KEY(subscription_type_id) REFERENCES subscription_type(id),
+                FOREIGN KEY(subscription_status_id) REFERENCES subscription_status(id)
             )'
         );
         $this->repository = new PdoCustomerRepository($this->pdo);
@@ -78,6 +97,8 @@ final class PdoCustomerRepositoryTest extends TestCase
         self::assertSame('Ada Lovelace', $found->name());
         self::assertSame(3, $found->subscription()->subscriptionTypeId());
         self::assertSame(12, $found->subscription()->durationMonths());
+        self::assertSame(1, $found->subscription()->status()->id());
+        self::assertSame('Bezahlt', $found->subscription()->status()->name());
 
         $found->rename('Augusta Ada');
         $found->changeSubscription(

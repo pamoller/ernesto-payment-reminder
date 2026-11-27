@@ -7,6 +7,7 @@ namespace App\Infrastructure\Database;
 use App\Domain\Customer\Customer;
 use App\Domain\Customer\CustomerRepository;
 use App\Domain\Customer\Subscription;
+use App\Domain\Customer\SubscriptionStatus;
 use App\Domain\Customer\SubscriptionType;
 use DateTimeImmutable;
 use PDO;
@@ -33,12 +34,15 @@ final class PdoCustomerRepository implements CustomerRepository
                 $subscription = $customer->subscription();
                 $statement = $this->pdo->prepare(
                     'INSERT INTO subscriptions
-                        (customer_id, subscription_type_id, starts_at, reminder_sent, created_at, updated_at)
-                     VALUES (?, ?, ?, NULL, ?, ?)',
+                        (customer_id, subscription_type_id, subscription_status_id,
+                         subscription_status_changed, starts_at, reminder_sent, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, NULL, ?, ?)',
                 );
                 $statement->execute([
                     $customer->id(),
                     $subscription->subscriptionTypeId(),
+                    $subscription->status()->id(),
+                    $this->formatTimestamp($subscription->statusChangedAt()),
                     $subscription->startsAt()->format('Y-m-d H:i:s'),
                     $now,
                     $now,
@@ -53,7 +57,8 @@ final class PdoCustomerRepository implements CustomerRepository
                 $subscription = $customer->subscription();
                 $statement = $this->pdo->prepare(
                     'UPDATE subscriptions
-                     SET subscription_type_id = ?, starts_at = ?, reminder_sent = ?, updated_at = ?
+                     SET subscription_type_id = ?, subscription_status_id = ?,
+                         subscription_status_changed = ?, starts_at = ?, reminder_sent = ?, updated_at = ?
                      WHERE customer_id = ?',
                 );
                 $reminderSent = $subscription->reminderSent() === null
@@ -61,6 +66,8 @@ final class PdoCustomerRepository implements CustomerRepository
                     : $this->formatTimestamp($subscription->reminderSent());
                 $statement->execute([
                     $subscription->subscriptionTypeId(),
+                    $subscription->status()->id(),
+                    $this->formatTimestamp($subscription->statusChangedAt()),
                     $subscription->startsAt()->format('Y-m-d H:i:s'),
                     $reminderSent,
                     $now,
@@ -84,10 +91,13 @@ final class PdoCustomerRepository implements CustomerRepository
         $statement = $this->pdo->prepare(
             'SELECT c.id, c.name, c.email,
                     s.id AS subscription_id, s.subscription_type_id, st.duration,
-                    s.starts_at, s.reminder_sent
+                    s.starts_at, s.reminder_sent, s.subscription_status_changed,
+                    ss.id AS status_id, ss.name AS status_name, ss.duration AS status_duration,
+                    ss.subject AS status_subject, ss.message AS status_message
              FROM customers c
              JOIN subscriptions s ON s.customer_id = c.id
              JOIN subscription_type st ON st.id = s.subscription_type_id
+             JOIN subscription_status ss ON ss.id = s.subscription_status_id
              WHERE c.id = ?',
         );
         $statement->execute([$id]);
@@ -101,10 +111,13 @@ final class PdoCustomerRepository implements CustomerRepository
         $statement = $this->pdo->query(
             'SELECT c.id, c.name, c.email,
                     s.id AS subscription_id, s.subscription_type_id, st.duration,
-                    s.starts_at, s.reminder_sent
+                    s.starts_at, s.reminder_sent, s.subscription_status_changed,
+                    ss.id AS status_id, ss.name AS status_name, ss.duration AS status_duration,
+                    ss.subject AS status_subject, ss.message AS status_message
              FROM customers c
              JOIN subscriptions s ON s.customer_id = c.id
              JOIN subscription_type st ON st.id = s.subscription_type_id
+             JOIN subscription_status ss ON ss.id = s.subscription_status_id
              ORDER BY c.id',
         );
 
@@ -214,6 +227,14 @@ final class PdoCustomerRepository implements CustomerRepository
             SubscriptionType::durationMonthsFrom((string) $row['duration']),
             new DateTimeImmutable((string) $row['starts_at'], new \DateTimeZone('UTC')),
             $reminderSent,
+            new SubscriptionStatus(
+                (int) $row['status_id'],
+                (string) $row['status_name'],
+                $row['status_duration'] === null ? null : (string) $row['status_duration'],
+                $row['status_subject'] === null ? null : (string) $row['status_subject'],
+                $row['status_message'] === null ? null : (string) $row['status_message'],
+            ),
+            new DateTimeImmutable((string) $row['subscription_status_changed'], new \DateTimeZone('UTC')),
         );
 
         return Customer::reconstitute(

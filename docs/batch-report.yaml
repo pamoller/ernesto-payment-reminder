@@ -1,72 +1,142 @@
-batch_id: "B05"
-completed_tasks: ["T005"]
+batch_id: "STATE-SLICE-01"
+completed_tasks: ["TS001", "TS002", "TS003"]
 blocked_tasks: []
 files_changed:
-  T005:
-    - file: "frontend/src/App.vue"
-      change_type: "modified"
-      description: "Added per-customer Remind action and latest sent timestamp display"
-    - file: "backend/src/Application/Reminder/ReminderService.php"
-      change_type: "modified"
-      description: "Added manual send flow supporting early/repeat sends and restoring prior state on failure"
-    - file: "backend/src/Infrastructure/Http/ReminderController.php"
+  TS001:
+    - file: "backend/src/Domain/Customer/Duration.php"
       change_type: "created"
-      description: "Added protected POST /api/customers/{id}/remind endpoint"
+      description: "Added validated calendar-based duration value object"
+    - file: "backend/src/Domain/Customer/SubscriptionStatus.php"
+      change_type: "created"
+      description: "Added subscription status definition"
+    - file: "backend/src/Domain/Customer/Subscription.php"
+      change_type: "modified"
+      description: "Added lifecycle, transition validation and next transition calculations"
+    - file: "backend/tests/Domain/Customer/DurationTest.php"
+      change_type: "created"
+      description: "Added duration validation and calendar edge-case tests"
+    - file: "backend/tests/Domain/Customer/SubscriptionStateTest.php"
+      change_type: "created"
+      description: "Added lifecycle and transition timestamp tests"
+  TS002:
+    - file: "backend/migrations/007_create_subscription_status.sql"
+      change_type: "created"
+      description: "Added MariaDB status schema and existing-subscription initialization"
+    - file: "backend/bin/migrate.php"
+      change_type: "modified"
+      description: "Added data-preserving SQLite status migration"
     - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
       change_type: "modified"
-      description: "Added conditional timestamp replacement and restoration"
-    - file: "backend/migrations/004_reminder_sent_precision.sql"
+      description: "Persisted and hydrated subscription state"
+    - file: "backend/src/Infrastructure/Database/PdoSubscriptionStatusRepository.php"
       change_type: "created"
-      description: "Added microsecond timestamp precision for claims"
+      description: "Added database-backed status definitions"
+    - file: "backend/src/Application/Customer/CustomerService.php"
+      change_type: "modified"
+      description: "Exposed current and next state data"
+  TS003:
+    - file: "backend/public/index.php"
+      change_type: "modified"
+      description: "Registered subscription status endpoint"
+    - file: "backend/src/Infrastructure/Http/CustomerController.php"
+      change_type: "modified"
+      description: "Added status definition response"
+    - file: "frontend/src/components/SubscriptionListView.vue"
+      change_type: "modified"
+      description: "Displayed state, state timestamp and next transition"
+    - file: "frontend/src/components/SubscriptionDetailView.vue"
+      change_type: "modified"
+      description: "Displayed lifecycle details and delivery timestamp"
     - file: "contracts/openapi.yaml"
       change_type: "modified"
-      description: "Documented manual reminder endpoint"
+      description: "Documented status definition endpoint"
+    - file: "api-test.sh"
+      change_type: "modified"
+      description: "Added live status endpoint and lifecycle response assertions"
 upstream_artifacts_consumed:
-  T005:
-    - artifact: "docs/ai-plan.md#5"
-      used_for: "Reminder timestamp and SMTP failure behavior"
-    - artifact: "user decision"
-      used_for: "Manual send allowed before expiry and replaces sent timestamp"
+  TS001:
+    - artifact: "docs/state-machine-plan.md#3-4"
+      used_for: "State transitions, duration validation and calendar semantics"
+  TS002:
+    - artifact: "docs/state-machine-plan.md#2,5"
+      used_for: "Schema, seed data and initial state assignment"
+  TS003:
+    - artifact: "docs/state-machine-plan.md#10-11"
+      used_for: "Read API and frontend state information"
 evidence_mapping:
-  T005:
-    - upstream: "user decision"
-      output: "backend/src/Application/Reminder/ReminderService.php"
-      evidence: "ReminderServiceTest::testManualReminderSendsBeforeExpiryAndReplacesPreviousSentDate"
-    - upstream: "user decision"
-      output: "frontend/src/App.vue"
-      evidence: "App.test.ts manual-remind test passes"
+  TS001:
+    - upstream: "docs/state-machine-plan.md#4"
+      output: "backend/src/Domain/Customer/Duration.php"
+      evidence: "DurationTest: 11 cases pass"
+    - upstream: "docs/state-machine-plan.md#3,6"
+      output: "backend/src/Domain/Customer/Subscription.php"
+      evidence: "SubscriptionStateTest: 5 cases pass"
+  TS002:
+    - upstream: "docs/state-machine-plan.md#2"
+      output: "backend/migrations/007_create_subscription_status.sql"
+      evidence: "Live migration, fresh migration and legacy migration checks pass"
+  TS003:
+    - upstream: "docs/state-machine-plan.md#10-11"
+      output: "frontend/src/components/SubscriptionListView.vue"
+      evidence: "Frontend tests and production build pass"
 traceability:
-  - requirement: "REQ-MANUAL-REMINDER"
-    plan_item: "Manueller Erinnerungsversand"
-    task: "T005"
-    files:
-      - "backend/src/Application/Reminder/ReminderService.php"
-      - "backend/src/Infrastructure/Http/ReminderController.php"
-      - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
-      - "frontend/src/App.vue"
+  - requirement: "REQ-STATE-DURATION"
+    plan_item: "3-4, 6"
+    task: "TS001"
+    files: ["backend/src/Domain/Customer/Duration.php", "backend/src/Domain/Customer/Subscription.php"]
+    status: "completed"
+  - requirement: "REQ-STATE-PERSISTENCE"
+    plan_item: "2, 5"
+    task: "TS002"
+    files: ["backend/migrations/007_create_subscription_status.sql", "backend/bin/migrate.php"]
+    status: "completed"
+  - requirement: "REQ-STATE-READOUT"
+    plan_item: "10-11"
+    task: "TS003"
+    files: ["frontend/src/components/SubscriptionListView.vue", "frontend/src/components/SubscriptionDetailView.vue"]
     status: "completed"
 protocol_violation: false
 errors: []
 warnings:
-  - severity: MEDIUM
-    message: "Real SMTP delivery was not invoked; configure SMTP credentials and verify using an approved test mailbox."
-required_endpoints: []
-endpoint_probes: []
+  - severity: "MEDIUM"
+    message: "Real SMTP delivery was not exercised because this slice is read-only and must not send customer email"
+  - severity: "MEDIUM"
+    message: "docs/draft.drawio is concurrently modified and unrelated to this slice; it was not changed or reverted"
+required_endpoints:
+  - method: "GET"
+    path: "/api/subscription-statuses"
+    source: "docs/state-machine-plan.md"
+    status: "implemented"
+endpoint_probes:
+  - method: "GET"
+    path: "/api/subscription-statuses"
+    status: 200
+    result: "PASS"
+  - method: "POST"
+    path: "/api/customers"
+    status: 201
+    result: "PASS"
 test_results:
-  T005_BACKEND:
+  TS001_BACKEND:
     command: "cd backend && php vendor/bin/phpunit"
-    passed: 21
+    passed: 42
     failed: 0
     skipped: 0
     failures: []
-  T005_FRONTEND:
+  TS003_FRONTEND:
     command: "cd frontend && npm test"
-    passed: 3
+    passed: 8
     failed: 0
     skipped: 0
     failures: []
-  T005_BUILD:
+  TS003_BUILD:
     command: "cd frontend && npm run build"
+    passed: 1
+    failed: 0
+    skipped: 0
+    failures: []
+  TS003_API:
+    command: "bash ./api-test.sh"
     passed: 1
     failed: 0
     skipped: 0

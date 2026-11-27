@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { auth } from '../auth'
-import { SUBSCRIPTIONS_REFRESH_EVENT, type Customer, type SubscriptionType } from '../types'
+import { SUBSCRIPTIONS_REFRESH_EVENT, type Customer, type SubscriptionStatus, type SubscriptionType } from '../types'
 
 type PendingAction = {
   type: 'remind' | 'renew'
@@ -13,6 +13,7 @@ const router = useRouter()
 const route = useRoute()
 const customers = ref<Customer[]>([])
 const types = ref<SubscriptionType[]>([])
+const statuses = ref<SubscriptionStatus[]>([])
 const loading = ref(true)
 const error = ref('')
 const success = ref('')
@@ -28,6 +29,13 @@ async function loadTypes(): Promise<void> {
   const response = await fetch('/api/subscription-types')
   if (!response.ok) throw new Error('Abonnementtypen konnten nicht geladen werden')
   types.value = (await response.json() as { subscription_types: SubscriptionType[] }).subscription_types
+}
+
+async function loadStatuses(): Promise<void> {
+  const response = await fetch('/api/subscription-statuses')
+  if (!response.ok) throw new Error('Abonnementstatus konnten nicht geladen werden')
+  const body = await response.json() as { subscription_statuses?: SubscriptionStatus[] }
+  statuses.value = body.subscription_statuses ?? []
 }
 
 async function loadCustomers(): Promise<void> {
@@ -127,10 +135,25 @@ function formatDate(value: string): string {
   return `${day}.${month}.${year}`
 }
 
-function formatTimestamp(value: string | null): string {
-  if (!value) return 'Noch nicht erinnert'
+function formatTimestamp(value: string | null | undefined, fallback = 'Noch nicht erinnert'): string {
+  if (!value) return fallback
   const date = new Date(value)
   return new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date)
+}
+
+function statusBadge(statusId: number): string {
+  return {
+    1: 'bg-emerald-100 text-emerald-800',
+    2: 'bg-yellow-100 text-yellow-800',
+    3: 'bg-orange-100 text-orange-800',
+    4: 'bg-slate-200 text-slate-800',
+  }[statusId] ?? 'bg-slate-100 text-slate-800'
+}
+
+function statusName(customer: Customer): string {
+  return statuses.value.find((status) => status.id === customer.subscription_status_id)?.name
+    ?? customer.subscription_status_name
+    ?? 'Unbekannt'
 }
 
 function open(customer: Customer): void {
@@ -155,7 +178,7 @@ watch(() => route.query, () => {
 
 onMounted(async () => {
   window.addEventListener(SUBSCRIPTIONS_REFRESH_EVENT, refreshCustomers)
-  await Promise.all([loadTypes(), loadCustomers()])
+  await Promise.all([loadTypes(), loadStatuses(), loadCustomers()])
 })
 
 onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, refreshCustomers))
@@ -179,13 +202,15 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
           <tr>
             <th v-for="column in [
               ['name','Name'],['email','E-Mail'],['subscription_type_id','Abonnement'],
-              ['start_date','Beginn'],['expires_at','Ende'],['reminder_sent','Erinnert am']
+              ['start_date','Beginn'],['expires_at','Ende']
             ]" :key="column[0]" class="border-b border-ernesto-blue-dark px-3 py-3">
               <button type="button" class="font-semibold text-white" @click="setSort(column[0])">
                 {{ column[1] }}<span v-if="sort === column[0]" aria-label="Sortierreihenfolge">{{ direction === 'asc' ? ' ↑' : ' ↓' }}</span>
               </button>
             </th>
             <th class="border-b border-ernesto-blue-dark px-3 py-3">Tage</th>
+            <th class="border-b border-ernesto-blue-dark px-3 py-3">Status</th>
+            <th class="border-b border-ernesto-blue-dark px-3 py-3">Erinnert am</th>
             <th class="border-b border-ernesto-blue-dark px-3 py-3">Aktionen</th>
           </tr>
         </thead>
@@ -204,7 +229,6 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
             <td class="px-3 py-3">{{ typeName(customer.subscription_type_id) }}</td>
             <td class="px-3 py-3">{{ formatDate(customer.start_date) }}</td>
             <td class="px-3 py-3">{{ formatDate(customer.expires_at) }}</td>
-            <td class="px-3 py-3">{{ formatTimestamp(customer.reminder_sent) }}</td>
             <td class="px-3 py-3">
               <span :class="{
                 'text-red-700': state(customer) === 'expired',
@@ -212,6 +236,13 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
                 'text-ernesto-blue': state(customer) === 'active'
               }">{{ remainingDays(customer) }}</span>
             </td>
+            <td class="px-3 py-3">
+              <span
+                class="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+                :class="statusBadge(customer.subscription_status_id)"
+              >{{ statusName(customer) }}</span>
+            </td>
+            <td class="px-3 py-3">{{ formatTimestamp(customer.reminder_sent) }}</td>
             <td class="px-3 py-3" @click.stop>
               <button
                 type="button"

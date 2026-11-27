@@ -93,6 +93,37 @@ paths:
       responses:
         '200':
           description: Subscription types
+  /api/subscription-statuses:
+    get:
+      summary: List available subscription status definitions
+      responses:
+        '200':
+          description: Subscription status definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscription_statuses]
+                properties:
+                  subscription_statuses:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, duration, subject, message]
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
+                        duration:
+                          type: string
+                          nullable: true
+                        subject:
+                          type: string
+                          nullable: true
+                        message:
+                          type: string
+                          nullable: true
   /api/customers/{id}:
     parameters:
       - name: id

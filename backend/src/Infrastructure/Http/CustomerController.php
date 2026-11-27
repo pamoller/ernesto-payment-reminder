@@ -37,6 +37,13 @@ final class CustomerController
         return $this->json($response, ['subscription_types' => $this->service->subscriptionTypes()]);
     }
 
+    public function listSubscriptionStatuses(
+        ServerRequestInterface $request,
+        ResponseInterface $response,
+    ): ResponseInterface {
+        return $this->json($response, ['subscription_statuses' => $this->service->subscriptionStatuses()]);
+    }
+
     public function get(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         $customer = $this->service->find((int) $args['id']);

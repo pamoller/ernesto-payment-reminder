@@ -57,7 +57,22 @@ describe('App', () => {
       }
       if (url.startsWith('/api/customers?')) {
         return new Response(JSON.stringify({
-          customers: [{ id: 1, name: 'Ada Lovelace', email: 'ada@example.com', subscription_type_id: 1, duration_months: 3, start_date: '2026-01-01', expires_at: '2026-04-01', reminder_sent: null }],
+          customers: [{
+            id: 1,
+            name: 'Ada Lovelace',
+            email: 'ada@example.com',
+            subscription_type_id: 1,
+            duration_months: 3,
+            start_date: '2026-01-01',
+            expires_at: '2026-04-01',
+            reminder_sent: null,
+            subscription_status_id: 2,
+            subscription_status_name: 'Fällig',
+            subscription_status_changed: '2026-04-01T00:00:00.000000+00:00',
+            next_subscription_status_id: 3,
+            next_subscription_status_name: 'Säumig',
+            next_subscription_status_at: '2026-04-08T00:00:00.000000+00:00',
+          }],
           pagination: { total_pages: 1 },
         }), { status: 200 })
       }
@@ -68,6 +83,8 @@ describe('App', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Ada Lovelace')
     expect(wrapper.text()).toContain('ada@example.com')
+    expect(wrapper.text()).toContain('Fällig')
+    expect(wrapper.text()).toContain('Säumig am')
   })
 
   it('zeigt Login-Fehler direkt auf der Loginseite', async () => {

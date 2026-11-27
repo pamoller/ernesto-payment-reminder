@@ -75,8 +75,8 @@ function formatDate(value: string): string {
   return `${day}.${month}.${year}`
 }
 
-function formatTimestamp(value: string | null): string {
-  if (!value) return 'Noch nicht erinnert'
+function formatTimestamp(value: string | null | undefined, fallback = 'Noch nicht verfügbar'): string {
+  if (!value) return fallback
   return new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
@@ -281,9 +281,13 @@ onBeforeUnmount(() => {
         <p v-if="success" role="status" class="mb-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">{{ success }}</p>
 
         <div v-if="id && customer" class="mb-5 grid gap-2 rounded border border-ernesto-blue/20 bg-white p-4 text-sm sm:grid-cols-3">
-          <div><span class="block font-semibold">Ablaufdatum</span>{{ formatDate(customer.expires_at) }}</div>
+          <div><span class="block font-semibold">Status</span>{{ customer.subscription_status_name }}</div>
+          <div><span class="block font-semibold">Status geändert am</span>{{ formatTimestamp(customer.subscription_status_changed) }}</div>
+          <div><span class="block font-semibold">Reguläres Fälligkeitsdatum</span>{{ formatDate(customer.expires_at) }}</div>
+          <div><span class="block font-semibold">Nächster Status</span>{{ customer.next_subscription_status_name ?? 'Kein automatischer Wechsel' }}</div>
+          <div><span class="block font-semibold">Nächster Wechsel</span>{{ formatTimestamp(customer.next_subscription_status_at, 'Kein automatischer Wechsel') }}</div>
           <div><span class="block font-semibold">Tage</span>{{ remainingDays() }}</div>
-          <div><span class="block font-semibold">Erinnert am</span>{{ formatTimestamp(customer.reminder_sent) }}</div>
+          <div><span class="block font-semibold">Versandstatus</span>{{ formatTimestamp(customer.reminder_sent, 'Noch nicht versendet') }}</div>
         </div>
 
         <SubscriptionForm

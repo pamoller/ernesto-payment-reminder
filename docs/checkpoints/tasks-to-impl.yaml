@@ -1,69 +1,145 @@
 metadata:
-  generated: "2026-11-25"
-  source_tasks: "docs/implementation-plan.md"
-  last_updated: "2026-11-25"
+  generated: "2026-11-27"
+  source_tasks: "docs/state-machine-plan.md"
+  last_updated: "2026-11-27"
 
 summary:
-  total_tasks: 1
-  completed_tasks: 1
+  total_tasks: 6
+  completed_tasks: 3
   in_progress_tasks: 0
-  pending_tasks: 0
-  completion_percentage: 100.0
+  pending_tasks: 3
+  completion_percentage: 50.0
 
 tasks:
-  - task_id: "T005"
-    description: "Add manual immediate reminder action to customer management"
+  - task_id: "TS001"
+    description: "Implement subscription status domain model and duration calculations"
     status: "completed"
     implementation:
       files_changed:
-        - file: "backend/src/Application/Reminder/ReminderService.php"
+        - file: "backend/src/Domain/Customer/Duration.php"
+          changes:
+            - change_type: "added"
+              description: "Calendar-aware duration value object"
+        - file: "backend/src/Domain/Customer/SubscriptionStatus.php"
+          changes:
+            - change_type: "added"
+              description: "State definition with duration and email content"
+        - file: "backend/src/Domain/Customer/Subscription.php"
           changes:
             - change_type: "modified"
-              description: "Added manual send behavior with previous-state restoration"
-        - file: "backend/src/Infrastructure/Http/ReminderController.php"
-          changes:
-            - change_type: "created"
-              description: "Added authenticated manual reminder endpoint"
-        - file: "frontend/src/App.vue"
-          changes:
-            - change_type: "modified"
-              description: "Added Remind button and send status"
-        - file: "backend/migrations/004_reminder_sent_precision.sql"
-          changes:
-            - change_type: "created"
-              description: "Added microsecond precision to reminder timestamp"
+              description: "Lifecycle transitions and next transition calculations"
     verification:
       build_passed: true
       test_results:
-        command: "cd backend && php vendor/bin/phpunit; cd frontend && npm test && npm run build"
-        passed: 24
+        command: "cd backend && php vendor/bin/phpunit"
+        passed: 42
         failed: 0
         skipped: 0
         failures: []
-      notes: "MariaDB migration applied; live SMTP delivery intentionally not invoked"
+      notes: "Duration calendar edge cases and lifecycle boundaries are covered"
     upstream_trace:
-      plan_item: "Manueller Erinnerungsversand"
-      requirements: ["REQ-MANUAL-REMINDER"]
-      full_trace: "REQ-MANUAL-REMINDER -> Manueller Erinnerungsversand -> T005"
+      plan_item: "3-4, 6"
+      requirements: ["REQ-STATE-DURATION"]
+      full_trace: "REQ-STATE-DURATION -> sections 3-4/6 -> TS001"
 
-pending_tasks: []
-untracked_changes: []
+  - task_id: "TS002"
+    description: "Migrate and persist subscription status definitions and assignments"
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "backend/migrations/007_create_subscription_status.sql"
+          changes:
+            - change_type: "added"
+              description: "MariaDB status schema and initial assignment"
+        - file: "backend/bin/migrate.php"
+          changes:
+            - change_type: "modified"
+              description: "Repeat-safe, data-preserving SQLite upgrade"
+        - file: "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
+          changes:
+            - change_type: "modified"
+              description: "Status persistence and hydration"
+    verification:
+      build_passed: true
+      test_results:
+        command: "fresh, legacy and repeat-safe migration probes"
+        passed: 3
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "No email is sent by migration"
+    upstream_trace:
+      plan_item: "2, 5"
+      requirements: ["REQ-STATE-PERSISTENCE"]
+      full_trace: "REQ-STATE-PERSISTENCE -> sections 2/5 -> TS002"
+
+  - task_id: "TS003"
+    description: "Expose status and next transition through REST and Vue"
+    status: "completed"
+    implementation:
+      files_changed:
+        - file: "backend/src/Infrastructure/Http/CustomerController.php"
+          changes:
+            - change_type: "modified"
+              description: "Status definition endpoint"
+        - file: "frontend/src/components/SubscriptionListView.vue"
+          changes:
+            - change_type: "modified"
+              description: "Lifecycle columns and status colors"
+        - file: "frontend/src/components/SubscriptionDetailView.vue"
+          changes:
+            - change_type: "modified"
+              description: "Lifecycle and next transition details"
+    verification:
+      build_passed: true
+      test_results:
+        command: "cd frontend && npm test && npm run build; bash ./api-test.sh"
+        passed: 10
+        failed: 0
+        skipped: 0
+        failures: []
+      notes: "Live GET /api/subscription-statuses returns 200 and four definitions"
+    upstream_trace:
+      plan_item: "10-11"
+      requirements: ["REQ-STATE-READOUT"]
+      full_trace: "REQ-STATE-READOUT -> sections 10-11 -> TS003"
+
+pending_tasks:
+  - task_id: "TS004"
+    description: "Implement manual state actions and state-based email delivery"
+    blocked_by: []
+    priority: "P1"
+  - task_id: "TS005"
+    description: "Implement automatic scheduler-driven lifecycle transitions"
+    blocked_by: ["TS004"]
+    priority: "P1"
+  - task_id: "TS006"
+    description: "Complete API/UI actions, concurrency hardening and final regression"
+    blocked_by: ["TS005"]
+    priority: "P1"
+
+untracked_changes:
+  - file: "docs/draft.drawio"
+    change_type: "modified"
+    concern: "Unrelated concurrent change; excluded from slice implementation"
+
 traceability_chain:
-  - chain_id: "TRACE-005"
-    requirement: "REQ-MANUAL-REMINDER"
-    plan_phase: "Slice 5"
-    plan_item: "Manueller Erinnerungsversand"
-    tasks: ["T005"]
+  - chain_id: "TRACE-STATE-01"
+    requirement: "REQ-STATE-DURATION"
+    plan_phase: "Slice 1"
+    plan_item: "Domain and readout foundation"
+    tasks: ["TS001", "TS002", "TS003"]
     files:
-      - "backend/src/Application/Reminder/ReminderService.php"
-      - "backend/src/Infrastructure/Http/ReminderController.php"
-      - "backend/src/Infrastructure/Database/PdoCustomerRepository.php"
-      - "frontend/src/App.vue"
+      - "backend/src/Domain/Customer/Duration.php"
+      - "backend/src/Domain/Customer/Subscription.php"
+      - "backend/migrations/007_create_subscription_status.sql"
+      - "frontend/src/components/SubscriptionListView.vue"
     status: "complete"
 
 validation:
   passed: true
   errors: []
   warnings:
-    - "Real SMTP delivery was not invoked to avoid sending an email to a real customer."
+    - "Real SMTP delivery is intentionally outside the read-only slice"
+    - "Unrelated docs/draft.drawio working-tree change remains untouched"
   blocking_issues: []

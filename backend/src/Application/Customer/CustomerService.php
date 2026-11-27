@@ -7,6 +7,8 @@ namespace App\Application\Customer;
 use App\Domain\Customer\Customer;
 use App\Domain\Customer\CustomerRepository;
 use App\Domain\Customer\Subscription;
+use App\Domain\Customer\SubscriptionStatus;
+use App\Domain\Customer\SubscriptionStatusRepository;
 use App\Domain\Customer\SubscriptionType;
 use App\Domain\Customer\SubscriptionTypeRepository;
 use DateTimeImmutable;
@@ -17,6 +19,7 @@ final class CustomerService
     public function __construct(
         private readonly CustomerRepository $customers,
         private readonly SubscriptionTypeRepository $subscriptionTypes,
+        private readonly SubscriptionStatusRepository $subscriptionStatuses,
     ) {
     }
 
@@ -35,10 +38,29 @@ final class CustomerService
         );
     }
 
+    /** @return list<array{id:int,name:string,duration:?string,subject:?string,message:?string}> */
+    public function subscriptionStatuses(): array
+    {
+        return array_map(
+            fn (SubscriptionStatus $status): array => [
+                'id' => $status->id(),
+                'name' => $status->name(),
+                'duration' => $status->duration(),
+                'subject' => $status->subject(),
+                'message' => $status->message(),
+            ],
+            $this->subscriptionStatuses->all(),
+        );
+    }
+
     /** @return list<array<string, mixed>> */
     public function all(): array
     {
-        return array_map(fn (Customer $customer): array => $this->toArray($customer), $this->customers->all());
+        $statuses = $this->subscriptionStatuses->all();
+        return array_map(
+            fn (Customer $customer): array => $this->toArray($customer, $statuses),
+            $this->customers->all(),
+        );
     }
 
     /** @return array{customers:list<array<string,mixed>>,pagination:array<string,int|string>} */
@@ -56,7 +78,11 @@ final class CustomerService
         }
         $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
 
-        $customers = array_map(fn (Customer $customer): array => $this->toArray($customer), $this->customers->all());
+        $statuses = $this->subscriptionStatuses->all();
+        $customers = array_map(
+            fn (Customer $customer): array => $this->toArray($customer, $statuses),
+            $this->customers->all(),
+        );
         usort($customers, static function (array $left, array $right) use ($sort, $direction): int {
             $leftValue = $left[$sort] ?? '';
             $rightValue = $right[$sort] ?? '';
@@ -87,7 +113,9 @@ final class CustomerService
     public function find(int $id): ?array
     {
         $customer = $this->customers->findById($id);
-        return $customer === null ? null : $this->toArray($customer);
+        return $customer === null
+            ? null
+            : $this->toArray($customer, $this->subscriptionStatuses->all());
     }
 
     /** @param array<string, mixed> $input
@@ -100,13 +128,18 @@ final class CustomerService
             $type->id,
             $type->durationMonths(),
             $this->startDate($input),
+            $this->paidStatus(),
+            new DateTimeImmutable('now', new \DateTimeZone('UTC')),
         );
         $customer = Customer::create(
             $this->string($input, 'name'),
             $this->string($input, 'email'),
             $subscription,
         );
-        return $this->toArray($this->customers->save($customer));
+        return $this->toArray(
+            $this->customers->save($customer),
+            $this->subscriptionStatuses->all(),
+        );
     }
 
     /** @param array<string, mixed> $input
@@ -129,9 +162,14 @@ final class CustomerService
             $type->durationMonths(),
             $this->startDate($input),
             $existing->reminderSent(),
+            $existing->status(),
+            $existing->statusChangedAt(),
         ));
 
-        return $this->toArray($this->customers->save($customer));
+        return $this->toArray(
+            $this->customers->save($customer),
+            $this->subscriptionStatuses->all(),
+        );
     }
 
     /** @return array<string, mixed>|null */
@@ -149,9 +187,14 @@ final class CustomerService
             $existing->durationMonths(),
             $startsAt,
             null,
+            $existing->status(),
+            $existing->statusChangedAt(),
         ));
 
-        return $this->toArray($this->customers->save($customer));
+        return $this->toArray(
+            $this->customers->save($customer),
+            $this->subscriptionStatuses->all(),
+        );
     }
 
     public function delete(int $id): bool
@@ -193,7 +236,7 @@ final class CustomerService
         if (!isset($input['start_date']) || !is_string($input['start_date'])) {
             throw new InvalidArgumentException('Start date is required');
         }
-        $date = DateTimeImmutable::createFromFormat('Y-m-d', $input['start_date'], new \DateTimeZone('UTC'));
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $input['start_date'], new \DateTimeZone('UTC'));
         $errors = DateTimeImmutable::getLastErrors();
         if ($date === false || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
             throw new InvalidArgumentException('Start date must use YYYY-MM-DD');
@@ -201,10 +244,24 @@ final class CustomerService
         return $date;
     }
 
-    /** @return array<string, mixed> */
-    private function toArray(Customer $customer): array
+    private function paidStatus(): SubscriptionStatus
+    {
+        $status = $this->subscriptionStatuses->findById(1);
+        if ($status === null) {
+            throw new \LogicException('Paid subscription status is not configured');
+        }
+        return $status;
+    }
+
+    /**
+     * @param list<SubscriptionStatus> $statuses
+     * @return array<string, mixed>
+     */
+    private function toArray(Customer $customer, array $statuses): array
     {
         $subscription = $customer->subscription();
+        $nextStatus = $subscription->nextAutomaticStatus($statuses);
+        $nextTransitionAt = $subscription->nextAutomaticTransitionAt($statuses);
         return [
             'id' => $customer->id(),
             'name' => $customer->name(),
@@ -214,6 +271,12 @@ final class CustomerService
             'start_date' => $subscription->startsAt()->format('Y-m-d'),
             'expires_at' => $subscription->expiresAt()->format('Y-m-d'),
             'reminder_sent' => $subscription->reminderSent()?->format('Y-m-d\TH:i:s.uP'),
+            'subscription_status_id' => $subscription->status()->id(),
+            'subscription_status_name' => $subscription->status()->name(),
+            'subscription_status_changed' => $subscription->statusChangedAt()->format('Y-m-d\TH:i:s.uP'),
+            'next_subscription_status_id' => $nextStatus?->id(),
+            'next_subscription_status_name' => $nextStatus?->name(),
+            'next_subscription_status_at' => $nextTransitionAt?->format('Y-m-d\TH:i:s.uP'),
         ];
     }
 }

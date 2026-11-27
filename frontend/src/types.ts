@@ -9,6 +9,12 @@ export type Customer = {
   start_date: string
   expires_at: string
   reminder_sent: string | null
+  subscription_status_id: number
+  subscription_status_name: string
+  subscription_status_changed: string
+  next_subscription_status_id: number | null
+  next_subscription_status_name: string | null
+  next_subscription_status_at: string | null
 }
 
 export type SubscriptionType = {
@@ -17,4 +23,12 @@ export type SubscriptionType = {
   duration: string
   duration_months: number
   reminder: string
+}
+
+export type SubscriptionStatus = {
+  id: number
+  name: string
+  duration: string | null
+  subject: string | null
+  message: string | null
 }

@@ -61,6 +61,11 @@ subscription_type_12_id="$(php -r '$body=json_decode(file_get_contents("/tmp/ern
 test -n "$subscription_type_3_id"
 test -n "$subscription_type_12_id"
 
+subscription_statuses_status="$(curl -sS -o /tmp/ernesto-subscription-statuses.json -w '%{http_code}' \
+  -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt "$base_url/api/subscription-statuses")"
+require_status subscription-statuses 200 "$subscription_statuses_status"
+php -r '$body=json_decode(file_get_contents("/tmp/ernesto-subscription-statuses.json"), true, 512, JSON_THROW_ON_ERROR); exit(count($body["subscription_statuses"] ?? []) === 4 ? 0 : 1);'
+
 create_status="$(curl -sS -o /tmp/ernesto-customer.json -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt \
   -H 'Content-Type: application/json' \
@@ -71,6 +76,7 @@ require_status customer-create 201 "$create_status"
 
 customer_id="$(php -r '$body=json_decode(file_get_contents("/tmp/ernesto-customer.json"), true, 512, JSON_THROW_ON_ERROR); echo $body["customer"]["id"];')"
 test -n "$customer_id"
+php -r '$body=json_decode(file_get_contents("/tmp/ernesto-customer.json"), true, 512, JSON_THROW_ON_ERROR); exit(($body["customer"]["subscription_status_id"] ?? null) === 1 && ($body["customer"]["next_subscription_status_id"] ?? null) === 2 ? 0 : 1);'
 
 list_status="$(curl -sS -o /tmp/ernesto-customers.json -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt "$base_url/api/customers")"
