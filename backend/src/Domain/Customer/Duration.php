@@ -45,6 +45,20 @@ final readonly class Duration
         };
     }
 
+    public function subtractFrom(DateTimeImmutable $date): DateTimeImmutable
+    {
+        if ($this->amount === 0) {
+            return $date;
+        }
+
+        return match ($this->unit) {
+            'DAY' => $date->modify('-' . $this->amount . ' days'),
+            'WEEK' => $date->modify('-' . ($this->amount * 7) . ' days'),
+            'MONTH' => $this->addCalendarMonths($date, -$this->amount),
+            'YEAR' => $this->addCalendarMonths($date, -$this->amount * 12),
+        };
+    }
+
     public function __toString(): string
     {
         return $this->amount . ' ' . $this->unit . ($this->amount === 1 ? '' : 'S');

@@ -63,6 +63,12 @@ test -n "$subscription_type_3_id"
 test -n "$subscription_type_12_id"
 php -r '$body=json_decode(file_get_contents("/tmp/ernesto-subscription-types.json"), true, 512, JSON_THROW_ON_ERROR); $expected=["Skool Black Friday"=>"1 DAYS","Skool Instant"=>"0 DAYS"]; foreach($expected as $name=>$duration){$found=false; foreach($body["subscription_types"] as $type){if(($type["name"]??null)===$name && ($type["duration"]??null)===$duration){$found=true;break;}} if(!$found) exit(1);}'
 
+test_data_status="$(curl -sS -o /tmp/ernesto-test-data.json -w '%{http_code}' \
+  -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt \
+  -X POST -H "X-CSRF-Token: $csrf_token" "$base_url/api/settings/test-data")"
+require_status settings-test-data 200 "$test_data_status"
+php -r '$body=json_decode(file_get_contents("/tmp/ernesto-test-data.json"), true, 512, JSON_THROW_ON_ERROR); exit(($body["test_data"]["status_id"] ?? null) === 1 ? 0 : 1);'
+
 subscription_statuses_status="$(curl -sS -o /tmp/ernesto-subscription-statuses.json -w '%{http_code}' \
   -c /tmp/ernesto-cookies.txt -b /tmp/ernesto-cookies.txt "$base_url/api/subscription-statuses")"
 require_status subscription-statuses 200 "$subscription_statuses_status"

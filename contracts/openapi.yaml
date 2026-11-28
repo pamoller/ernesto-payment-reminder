@@ -171,3 +171,19 @@ paths:
           description: Delivery result; state and dates remain unchanged
         '409':
           description: Delivery state changed concurrently
+  /api/settings/cron:
+    post:
+      summary: Run the nightly subscription scheduler from the settings UI
+      responses:
+        '200':
+          description: Scheduler result including transitions and delivery counts
+        '500':
+          description: Scheduler failed
+  /api/settings/test-data:
+    post:
+      summary: Import or reset the Test Data subscription for the configured admin email
+      responses:
+        '200':
+          description: Test subscription reset to paid
+        '422':
+          description: Test data configuration is invalid

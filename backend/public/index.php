@@ -13,10 +13,13 @@ use App\Infrastructure\Database\PdoSubscriptionStatusRepository;
 use App\Infrastructure\Http\CustomerController;
 use App\Infrastructure\Http\AuthController;
 use App\Infrastructure\Http\SubscriptionLifecycleController;
+use App\Infrastructure\Http\SettingsController;
+use App\Infrastructure\Database\SettingsTestDataService;
 use App\Infrastructure\Auth\SessionAuth;
 use App\Infrastructure\Auth\Csrf;
 use App\Application\Reminder\ErrorLogReminderLogger;
 use App\Application\Customer\SubscriptionLifecycleService;
+use App\Application\Reminder\ReminderService;
 use App\Infrastructure\Reminder\PhpmailerReminderMailer;
 use Slim\Factory\AppFactory;
 
@@ -75,6 +78,24 @@ $lifecycleController = new SubscriptionLifecycleController(
     $customerService,
     $clock,
 );
+$latestSendValue = getenv('MESSAGE_LATEST_SEND');
+if ($latestSendValue === false
+    || filter_var($latestSendValue, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) === false
+) {
+    throw new RuntimeException('MESSAGE_LATEST_SEND must be a non-negative integer');
+}
+$settingsController = new SettingsController(
+    new ReminderService(
+        $customerRepository,
+        $mailer,
+        $logger,
+        (int) $latestSendValue,
+        new PdoSubscriptionStatusRepository($pdo),
+    ),
+    new SettingsTestDataService($pdo),
+    $clock,
+    getenv('ADMIN_EMAIL') ?: '',
+);
 
 $app->get('/api/customers', [$customerController, 'list'])->add(new SessionAuth());
 $app->get('/api/subscription-types', [$customerController, 'listSubscriptionTypes'])->add(new SessionAuth());
@@ -85,4 +106,6 @@ $app->put('/api/customers/{id}', [$customerController, 'update'])->add(new Sessi
 $app->post('/api/customers/{id}/renew', [$customerController, 'renew'])->add(new SessionAuth());
 $app->delete('/api/customers/{id}', [$customerController, 'delete'])->add(new SessionAuth());
 $app->post('/api/customers/{id}/status-email', [$lifecycleController, 'resend'])->add(new SessionAuth());
+$app->post('/api/settings/cron', [$settingsController, 'runCron'])->add(new SessionAuth());
+$app->post('/api/settings/test-data', [$settingsController, 'importTestData'])->add(new SessionAuth());
 $app->run();

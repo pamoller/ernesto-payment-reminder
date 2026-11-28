@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Throwable;
+use PDOException;
 
 final class CustomerController
 {
@@ -60,6 +61,15 @@ final class CustomerController
             return $this->json($response, ['customer' => $customer], 201);
         } catch (InvalidArgumentException $exception) {
             return $this->json($response, ['error' => $exception->getMessage()], 422);
+        } catch (PDOException $exception) {
+            if ($this->isDuplicateCustomerEmail($exception)) {
+                return $this->json(
+                    $response,
+                    ['error' => 'Bisher kann pro E-Mail nur ein Benutzer registriert werden.'],
+                    422,
+                );
+            }
+            return $this->serverError($response, $exception);
         } catch (Throwable $exception) {
             return $this->serverError($response, $exception);
         }
@@ -78,6 +88,15 @@ final class CustomerController
                 : $this->json($response, ['customer' => $customer]);
         } catch (InvalidArgumentException $exception) {
             return $this->json($response, ['error' => $exception->getMessage()], 422);
+        } catch (PDOException $exception) {
+            if ($this->isDuplicateCustomerEmail($exception)) {
+                return $this->json(
+                    $response,
+                    ['error' => 'Bisher kann pro E-Mail nur ein Benutzer registriert werden.'],
+                    422,
+                );
+            }
+            return $this->serverError($response, $exception);
         } catch (Throwable $exception) {
             return $this->serverError($response, $exception);
         }
@@ -110,6 +129,13 @@ final class CustomerController
     {
         error_log($exception->getMessage());
         return $this->json($response, ['error' => 'Internal server error'], 500);
+    }
+
+    private function isDuplicateCustomerEmail(PDOException $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+        return (string) $exception->getCode() === '23000'
+            && (str_contains($message, 'uk_customers_email') || str_contains($message, 'customers.email'));
     }
 
     /** @param array<string, mixed> $payload */

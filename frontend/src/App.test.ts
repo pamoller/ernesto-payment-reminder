@@ -104,6 +104,43 @@ describe('App', () => {
     expect(wrapper.find('[role="alert"]').text()).toBe('Invalid credentials')
   })
 
+  it('öffnet die Einstellungen und zeigt Cron- sowie Testdaten-Aktion', async () => {
+    let listLoads = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url === '/api/auth/session') {
+        return new Response(JSON.stringify({ authenticated: true, csrf_token: 'test-csrf', username: 'admin' }), { status: 200 })
+      }
+      if (url === '/api/subscription-types') {
+        return new Response(JSON.stringify({ subscription_types: [] }), { status: 200 })
+      }
+      if (url === '/api/subscription-statuses') {
+        return new Response(JSON.stringify({ subscription_statuses: [] }), { status: 200 })
+      }
+      if (url.startsWith('/api/customers?')) {
+        listLoads++
+        return new Response(JSON.stringify({ customers: [], pagination: { total_pages: 1 } }), { status: 200 })
+      }
+      if (url === '/api/settings/test-data') {
+        return new Response(JSON.stringify({ test_data: { id: 1, email: 'admin@example.com', status_id: 1 } }), { status: 200 })
+      }
+      return new Response(JSON.stringify({}), { status: 200 })
+    })
+
+    const { wrapper } = await mountApp()
+    await flushPromises()
+    await wrapper.find('button[aria-label="Einstellungen"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Cron starten:')
+    expect(wrapper.text()).toContain('Testdaten einspielen:')
+    expect(wrapper.findAll('button').filter((button) => button.text() === 'ok')).toHaveLength(2)
+    const beforeRefresh = listLoads
+    await wrapper.findAll('button').filter((button) => button.text() === 'ok')[1].trigger('click')
+    await flushPromises()
+    expect(listLoads).toBe(beforeRefresh + 1)
+  })
+
   it('aktualisiert ein abgelaufenes CSRF-Token vor dem Login', async () => {
     let loginAttempts = 0
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
