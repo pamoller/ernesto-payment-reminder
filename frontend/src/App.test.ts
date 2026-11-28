@@ -104,6 +104,55 @@ describe('App', () => {
     expect(wrapper.find('[role="alert"]').text()).toBe('Invalid credentials')
   })
 
+  it('aktualisiert ein abgelaufenes CSRF-Token vor dem Login', async () => {
+    let loginAttempts = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url === '/api/auth/session') {
+        return new Response(JSON.stringify({
+          authenticated: false,
+          csrf_token: loginAttempts === 0 ? 'stale-csrf' : 'fresh-csrf',
+          username: null,
+        }), { status: 200 })
+      }
+      if (url === '/api/auth/login') {
+        loginAttempts++
+        const headers = init?.headers as Record<string, string>
+        if (headers['X-CSRF-Token'] === 'stale-csrf') {
+          return new Response(JSON.stringify({ error: 'Invalid CSRF token' }), { status: 419 })
+        }
+        return new Response(JSON.stringify({
+          authenticated: true,
+          csrf_token: 'fresh-csrf',
+          username: 'admin',
+        }), { status: 200 })
+      }
+      if (url === '/api/subscription-types') {
+        return new Response(JSON.stringify({ subscription_types: [] }), { status: 200 })
+      }
+      if (url === '/api/subscription-statuses') {
+        return new Response(JSON.stringify({ subscription_statuses: [] }), { status: 200 })
+      }
+      if (url.startsWith('/api/customers?')) {
+        return new Response(JSON.stringify({
+          customers: [],
+          pagination: { total_pages: 1 },
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ error: 'Unexpected request' }), { status: 500 })
+    })
+
+    const { wrapper } = await mountApp('/login')
+    await flushPromises()
+    await wrapper.find('input[name="username"]').setValue('admin')
+    await wrapper.find('input[name="password"]').setValue('secret')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(loginAttempts).toBe(2)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+
   it('übermittelt die eingegebenen Werte beim ersten Speichern einer Subscription', async () => {
     let submitted: Record<string, unknown> | null = null
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {

@@ -64,14 +64,21 @@ function durationLabel(duration: string): string {
         <button
           type="button"
           :disabled="busy || !canRemind"
-          class="shrink-0 rounded bg-ernesto-blue px-4 py-2 text-white disabled:opacity-50"
+          class="flex shrink-0 items-center gap-2 rounded bg-ernesto-blue px-4 py-2 text-white disabled:opacity-50"
           @click="emit('remind')"
-        >Erinnern</button>
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" class="size-4 fill-none stroke-current" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.3 21h3.4" />
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+            <path d="M2.7 5.3 5 7.6M21.3 5.3 19 7.6" />
+          </svg>
+          Erinnern
+        </button>
       </div>
     </div>
     <div>
       <label for="start_date" class="mb-1 block text-sm font-semibold text-slate-800">Beginn</label>
-      <input id="start_date" type="date" :value="modelValue.start_date" @input="update('start_date', $event)" required class="w-full rounded border border-slate-300 px-3 py-2" />
+      <input id="start_date" type="date" :value="modelValue.start_date" @input="update('start_date', $event)" required class="w-1/3 min-w-0 rounded border border-slate-300 px-3 py-2" />
     </div>
     <slot name="actions" :busy="busy" />
   </form>

@@ -14,4 +14,8 @@ export const auth = reactive({
     auth.username = body.username ?? ''
     auth.initialized = true
   },
+  async refreshCsrfToken(): Promise<string> {
+    await this.loadSession()
+    return auth.csrfToken
+  },
 })

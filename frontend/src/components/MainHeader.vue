@@ -22,11 +22,23 @@ async function logout(): Promise<void> {
       <nav class="flex flex-wrap items-center gap-2 text-sm" aria-label="Hauptnavigation">
         <a
           href="/subscriptions"
+          title="Abonnements"
+          aria-label="Abonnements"
           class="rounded bg-white/15 px-3 py-2 text-white"
-        >Abonnements</a>
-        <a href="/subscriptions/new" class="rounded px-3 py-2 text-white hover:bg-white/15">Abonnement hinzufügen</a>
-        <button type="button" class="rounded px-3 py-2 text-white hover:bg-white/15" @click="logout">
-          Abmelden
+        >
+          Abonnements
+        </a>
+        <button
+          type="button"
+          title="Logout"
+          aria-label="Logout"
+          class="grid size-9 place-items-center rounded-full text-white hover:bg-white/15"
+          @click="logout"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" class="size-5 fill-none stroke-current" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v10" />
+            <path d="M18.36 6.64a9 9 0 1 1-12.72 0" />
+          </svg>
         </button>
       </nav>
     </div>

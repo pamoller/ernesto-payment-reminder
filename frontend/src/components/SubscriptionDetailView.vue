@@ -24,6 +24,7 @@ const busy = ref(false)
 const error = ref('')
 const success = ref('')
 const resendDialog = ref(false)
+const deleteDialog = ref(false)
 
 function close(): void {
   void router.push('/subscriptions')
@@ -124,7 +125,8 @@ async function persist(): Promise<void> {
 }
 
 async function deleteCustomer(): Promise<void> {
-  if (!id.value || !window.confirm('Soll dieses Abonnement wirklich gelöscht werden?')) return
+  if (!id.value) return
+  deleteDialog.value = false
   if (busy.value) return
   busy.value = true
   error.value = ''
@@ -217,7 +219,12 @@ onBeforeUnmount(() => {
         <h1 id="subscription-detail-title" class="text-xl font-bold text-white sm:text-2xl">
           {{ id ? 'Abonnement bearbeiten' : 'Abonnement hinzufügen' }}
         </h1>
-        <button type="button" aria-label="Schließen" class="rounded px-3 py-1 text-2xl leading-none text-white" @click="close">×</button>
+        <button type="button" aria-label="Schließen" class="grid size-9 place-items-center rounded-full text-white hover:bg-white/15" @click="close">
+          <svg aria-hidden="true" viewBox="0 0 24 24" class="size-6 fill-none stroke-current" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="m9 9 6 6m0-6-6 6" />
+          </svg>
+        </button>
       </header>
       <div class="p-5 sm:p-7">
         <p v-if="error" role="alert" class="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700">{{ error }}</p>
@@ -239,7 +246,7 @@ onBeforeUnmount(() => {
                 {{ busy ? 'Speichert …' : 'Speichern' }}
               </button>
               <button type="button" class="rounded bg-ernesto-blue px-4 py-2 text-white" @click="close">Abbrechen</button>
-              <button v-if="id" type="button" :disabled="busy" class="rounded border border-red-200 px-4 py-2 text-red-700" @click="deleteCustomer">Löschen</button>
+              <button v-if="id" type="button" :disabled="busy" class="rounded bg-red-800/80 px-4 py-2 text-white hover:bg-red-800 disabled:opacity-50" @click="deleteDialog = true">Löschen</button>
             </div>
           </template>
         </SubscriptionForm>
@@ -252,7 +259,18 @@ onBeforeUnmount(() => {
         <p class="mt-3">Die E-Mail des aktuellen Status wird erneut an {{ customer?.email }} versendet. Der Abo-Status, das Fälligkeitsdatum und der Statuszeitpunkt bleiben unverändert.</p>
         <div class="mt-5 flex gap-2">
           <button type="button" class="rounded bg-ernesto-blue px-3 py-2 text-white" @click="confirmResend">E-Mail senden</button>
-          <button type="button" class="rounded border px-3 py-2" @click="resendDialog = false">Abbrechen</button>
+          <button type="button" class="rounded border border-slate-300 px-3 py-2" @click="resendDialog = false">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="deleteDialog" class="fixed inset-0 z-40 grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <div class="w-full max-w-md rounded border-2 border-ernesto-blue bg-white p-6 text-slate-800">
+        <h2 id="delete-title" class="text-xl font-bold">Abonnement löschen?</h2>
+        <p class="mt-3">Soll das Abonnement von {{ customer?.name }} wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.</p>
+        <div class="mt-5 flex gap-2">
+          <button type="button" :disabled="busy" class="rounded bg-red-800 px-3 py-2 text-white disabled:opacity-50" @click="deleteCustomer">Löschen</button>
+          <button type="button" :disabled="busy" class="rounded border border-slate-300 px-3 py-2 disabled:opacity-50" @click="deleteDialog = false">Abbrechen</button>
         </div>
       </div>
     </div>

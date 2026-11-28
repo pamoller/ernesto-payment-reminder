@@ -165,8 +165,14 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
 
 <template>
   <main class="mx-auto max-w-6xl px-4 py-6">
-    <header class="mb-5 rounded bg-ernesto-blue px-4 py-3 text-white">
+    <header class="mb-5 flex items-center justify-between rounded bg-ernesto-blue px-4 py-3 text-white">
       <h1 class="text-2xl font-bold">Abonnements</h1>
+      <a
+        href="/subscriptions/new"
+        aria-label="Abonnement hinzufügen"
+        title="Abonnement hinzufügen"
+        class="grid size-10 place-items-center rounded-full bg-white text-2xl font-light leading-none text-ernesto-blue shadow-sm transition hover:bg-ernesto-gold hover:text-white focus-visible:outline-white"
+      >+</a>
     </header>
     <p v-if="error" role="alert" class="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700">{{ error }}</p>
     <p v-if="success" role="status" class="mb-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">{{ success }}</p>
@@ -225,9 +231,11 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
               <button
                 type="button"
                 :disabled="processingId === customer.id"
-                class="rounded bg-ernesto-blue px-3 py-1.5 text-white disabled:opacity-60"
+                class="whitespace-nowrap rounded bg-ernesto-blue px-3 py-1.5 text-white disabled:opacity-60"
                 @click="pendingAction = { customer }"
-              >Verlängern</button>
+              >
+                Verlängern
+              </button>
             </td>
           </tr>
         </tbody>
@@ -256,7 +264,7 @@ onBeforeUnmount(() => window.removeEventListener(SUBSCRIPTIONS_REFRESH_EVENT, re
           Status, Statuszeitpunkt und Erinnerung werden zurückgesetzt.
         </p>
         <div class="mt-5 flex gap-2">
-          <button type="button" class="rounded bg-ernesto-blue px-3 py-2 text-white" @click="renew(pendingAction.customer)">Verlängern</button>
+          <button type="button" class="whitespace-nowrap rounded bg-ernesto-blue px-3 py-2 text-white" @click="renew(pendingAction.customer)">Verlängern</button>
           <button type="button" class="rounded border px-3 py-2" @click="pendingAction = null">Abbrechen</button>
         </div>
       </section>

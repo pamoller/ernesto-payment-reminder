@@ -14,14 +14,7 @@ async function login(): Promise<void> {
   submitting.value = true
   error.value = ''
   try {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': auth.csrfToken },
-      body: JSON.stringify({ username: username.value, password: password.value }),
-    })
-    const body = await response.json() as { authenticated?: boolean; csrf_token?: string; error?: string }
-    if (!response.ok) throw new Error(body.error ?? 'Login fehlgeschlagen')
+    const body = await submitLogin(await auth.refreshCsrfToken())
     auth.authenticated = body.authenticated === true
     auth.csrfToken = body.csrf_token ?? auth.csrfToken
     auth.initialized = true
@@ -32,6 +25,36 @@ async function login(): Promise<void> {
   } finally {
     submitting.value = false
   }
+}
+
+async function submitLogin(csrfToken: string): Promise<{
+  authenticated?: boolean
+  csrf_token?: string
+  error?: string
+}> {
+  const response = await fetch('/api/auth/login', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify({ username: username.value, password: password.value }),
+  })
+  const body = await response.json() as { authenticated?: boolean; csrf_token?: string; error?: string }
+  if (response.status === 419) {
+    const retry = await fetch('/api/auth/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': await auth.refreshCsrfToken(),
+      },
+      body: JSON.stringify({ username: username.value, password: password.value }),
+    })
+    const retryBody = await retry.json() as { authenticated?: boolean; csrf_token?: string; error?: string }
+    if (!retry.ok) throw new Error(retryBody.error ?? 'Login fehlgeschlagen')
+    return retryBody
+  }
+  if (!response.ok) throw new Error(body.error ?? 'Login fehlgeschlagen')
+  return body
 }
 </script>
 
